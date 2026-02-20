@@ -11,7 +11,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion != 'success' }}
     steps:
       - run: |
-          echo "🚫 CD BLOCKED because CI did not pass."
+          echo "CD BLOCKED because CI did not pass."
           echo "CI conclusion: ${{ github.event.workflow_run.conclusion }}"
 
   deploy:
@@ -37,5 +37,5 @@ jobs:
 
       - name: Dummy deploy step
         run: |
-          echo "✅ CI passed. Dummy deploy executed."
+          echo "CI passed. Dummy deploy executed."
           ls -lah build/libs || true
