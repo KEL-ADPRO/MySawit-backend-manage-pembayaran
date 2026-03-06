@@ -9,5 +9,4 @@ public class MySawitPembayaranApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(MySawitPembayaranApplication.class, args);
 	}
-
 }

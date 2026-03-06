@@ -29,6 +29,7 @@ repositories {
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-web")
+	implementation("org.springframework.boot:spring-boot-starter-validation")
 
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
@@ -39,8 +40,8 @@ dependencies {
 	runtimeOnly("org.postgresql:postgresql")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
+	testImplementation("org.mockito:mockito-core")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-
 	testRuntimeOnly("com.h2database:h2")
 }
 
@@ -51,17 +52,23 @@ tasks.withType<Test> {
 tasks.register<Test>("unitTest") {
 	description = "Runs the unit tests."
 	group = "verification"
-	filter { excludeTestsMatching("*FunctionalTest") }
+	filter {
+		excludeTestsMatching("*FunctionalTest")
+	}
 }
 
 tasks.register<Test>("functionalTest") {
 	description = "Runs the functional tests."
 	group = "verification"
-	filter { includeTestsMatching("*FunctionalTest") }
+	filter {
+		includeTestsMatching("*FunctionalTest")
+	}
 }
 
 tasks.test {
-	filter { excludeTestsMatching("*FunctionalTest") }
+	filter {
+		excludeTestsMatching("*FunctionalTest")
+	}
 	finalizedBy(tasks.jacocoTestReport)
 }
 

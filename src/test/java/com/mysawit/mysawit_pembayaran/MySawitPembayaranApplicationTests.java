@@ -9,5 +9,4 @@ class MySawitPembayaranApplicationTests {
 	@Test
 	void contextLoads() {
 	}
-
 }
