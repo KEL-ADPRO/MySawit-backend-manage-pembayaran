@@ -62,6 +62,7 @@ class PayrollControllerTest {
         when(payrollService.createPayroll(any())).thenReturn(buildResponse(payrollId, PayrollStatus.PENDING));
 
         mockMvc.perform(post("/api/pembayaran/payroll")
+                        .header("X-User-Id", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())

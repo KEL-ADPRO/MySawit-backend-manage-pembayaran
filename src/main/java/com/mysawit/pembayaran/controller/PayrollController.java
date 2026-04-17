@@ -24,7 +24,12 @@ public class PayrollController {
     private final PayrollService payrollService;
 
     @PostMapping
-    public ResponseEntity<PayrollResponse> createPayroll(@Valid @RequestBody CreatePayrollRequest request) {
+    public ResponseEntity<PayrollResponse> createPayroll(
+            @RequestHeader(value = "X-User-Id", required = false) UUID requesterId,
+            @Valid @RequestBody CreatePayrollRequest request) {
+        if (requesterId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(payrollService.createPayroll(request));
     }
 
