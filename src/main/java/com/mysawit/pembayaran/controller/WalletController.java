@@ -25,7 +25,11 @@ public class WalletController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<WalletResponse> getOwnWallet(@RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<WalletResponse> getOwnWallet(
+            @RequestHeader(value = "X-User-Id", required = false) UUID userId) {
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         return ResponseEntity.ok(walletService.getWalletByUserId(userId));
     }
 
