@@ -1,17 +1,17 @@
 package com.mysawit.pembayaran.dto.request;
 
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
 
 @Data
 public class UpdateWageConfigRequest {
 
-    @Positive
+    @PositiveOrZero
     private double buruhWagePerKg;
 
-    @Positive
+    @PositiveOrZero
     private double supirTrukWagePerKg;
 
-    @Positive
+    @PositiveOrZero
     private double mandorWagePerKg;
 }
