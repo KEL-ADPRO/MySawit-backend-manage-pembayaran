@@ -43,12 +43,7 @@ public class PayrollController {
     }
 
     @PutMapping("/{id}/approve")
-    public ResponseEntity<PayrollResponse> approvePayroll(
-            @PathVariable UUID id,
-            @RequestHeader(value = "X-User-Role", required = false) String userRole) {
-        if (!isAdmin(userRole)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
+    public ResponseEntity<PayrollResponse> approvePayroll(@PathVariable UUID id) {
         return ResponseEntity.ok(payrollService.approvePayroll(id));
     }
 
