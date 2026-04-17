@@ -21,7 +21,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InsufficientBalanceException.class)
     public ResponseEntity<Map<String, Object>> handleInsufficientBalance(InsufficientBalanceException ex) {
-        return buildError(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException ex) {
+        return buildError(HttpStatus.CONFLICT, ex.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
