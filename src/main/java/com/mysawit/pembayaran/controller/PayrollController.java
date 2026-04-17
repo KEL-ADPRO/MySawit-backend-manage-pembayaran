@@ -7,10 +7,12 @@ import com.mysawit.pembayaran.model.enums.PayrollStatus;
 import com.mysawit.pembayaran.service.PayrollService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,8 +31,10 @@ public class PayrollController {
     @GetMapping
     public ResponseEntity<List<PayrollResponse>> getPayrolls(
             @RequestParam(required = false) PayrollStatus status,
-            @RequestParam(required = false) UUID userId) {
-        return ResponseEntity.ok(payrollService.getPayrolls(status, userId));
+            @RequestParam(required = false) UUID userId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+        return ResponseEntity.ok(payrollService.getPayrolls(status, userId, startDate, endDate));
     }
 
     @GetMapping("/{id}")
@@ -39,7 +43,12 @@ public class PayrollController {
     }
 
     @PutMapping("/{id}/approve")
-    public ResponseEntity<PayrollResponse> approvePayroll(@PathVariable UUID id) {
+    public ResponseEntity<PayrollResponse> approvePayroll(
+            @PathVariable UUID id,
+            @RequestHeader(value = "X-User-Role", required = false) String userRole) {
+        if (!isAdmin(userRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         return ResponseEntity.ok(payrollService.approvePayroll(id));
     }
 
@@ -48,5 +57,9 @@ public class PayrollController {
             @PathVariable UUID id,
             @Valid @RequestBody RejectPayrollRequest request) {
         return ResponseEntity.ok(payrollService.rejectPayroll(id, request));
+    }
+
+    private boolean isAdmin(String userRole) {
+        return "ADMIN".equals(userRole);
     }
 }
