@@ -22,9 +22,6 @@ public class PaymentGatewayController {
     public ResponseEntity<TopUpResponse> initiateTopUp(
             @RequestHeader(value = "X-User-Role", required = false) String userRole,
             @Valid @RequestBody TopUpRequest request) {
-        if (!isAdmin(userRole)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
         return ResponseEntity.status(HttpStatus.CREATED).body(paymentGatewayService.initiateTopUp(request));
     }
 
