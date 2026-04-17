@@ -8,7 +8,7 @@ public class SupirTrukWageStrategy implements WageCalculationStrategy {
 
     @Override
     public double calculate(double wagePerKg, double kilogram) {
-        throw new UnsupportedOperationException("Not yet implemented");
+        return wagePerKg * kilogram * 0.9;
     }
 
     @Override
