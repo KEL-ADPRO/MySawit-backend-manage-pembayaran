@@ -16,4 +16,8 @@ public interface WalletService {
     TopUpResponse initiateTopUp(TopUpRequest request);
 
     void handleTopUpCallback(Map<String, Object> payload);
+
+    WalletResponse addBalance(UUID userId, double amount);
+
+    WalletResponse deductBalance(UUID userId, double amount);
 }

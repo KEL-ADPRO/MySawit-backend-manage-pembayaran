@@ -32,4 +32,14 @@ public class WalletServiceImpl implements WalletService {
     public void handleTopUpCallback(Map<String, Object> payload) {
         throw new UnsupportedOperationException("Not yet implemented");
     }
+
+    @Override
+    public WalletResponse addBalance(UUID userId, double amount) {
+        throw new UnsupportedOperationException("Not yet implemented");
+    }
+
+    @Override
+    public WalletResponse deductBalance(UUID userId, double amount) {
+        throw new UnsupportedOperationException("Not yet implemented");
+    }
 }
