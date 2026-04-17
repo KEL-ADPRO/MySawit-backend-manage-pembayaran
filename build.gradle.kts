@@ -1,8 +1,9 @@
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "3.5.10"
     id("io.spring.dependency-management") version "1.1.7"
-    jacoco
+    id("org.sonarqube") version "7.2.2.6593"
 }
 
 group = "com.mysawit"
@@ -49,5 +50,14 @@ tasks.jacocoTestReport {
     reports {
         xml.required = true
         html.required = true
+    }
+}
+
+sonar {
+    properties {
+        property("sonar.projectKey", "KEL-ADPRO_MySawit-backend-manage-pembayaran")
+        property("sonar.organization", "kel-adpro")
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
     }
 }
