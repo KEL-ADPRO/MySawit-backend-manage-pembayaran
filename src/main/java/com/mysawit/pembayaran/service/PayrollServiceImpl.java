@@ -89,6 +89,7 @@ public class PayrollServiceImpl implements PayrollService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<PayrollResponse> getPayrolls(PayrollStatus status, UUID userId,
                                               LocalDateTime startDate, LocalDateTime endDate) {
         List<Payroll> payrolls;
@@ -112,6 +113,7 @@ public class PayrollServiceImpl implements PayrollService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PayrollResponse getPayrollById(UUID id) {
         return toResponse(findOrThrow(id));
     }
