@@ -12,6 +12,7 @@ import com.mysawit.pembayaran.repository.PayrollRepository;
 import com.mysawit.pembayaran.repository.WageConfigRepository;
 import com.mysawit.pembayaran.service.strategy.WageCalculatorFactory;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PayrollServiceImpl implements PayrollService {
@@ -66,6 +68,7 @@ public class PayrollServiceImpl implements PayrollService {
         if (payroll.getStatus() != PayrollStatus.PENDING) {
             throw new IllegalStateException("Only PENDING payrolls can be approved");
         }
+        log.info("Approving payroll {} for user {}, amount {}", id, payroll.getUserId(), payroll.getAmount());
         walletService.deductBalance(ADMIN_USER_ID, payroll.getAmount());
         walletService.addBalance(payroll.getUserId(), payroll.getAmount());
         payroll.setStatus(PayrollStatus.ACCEPTED);

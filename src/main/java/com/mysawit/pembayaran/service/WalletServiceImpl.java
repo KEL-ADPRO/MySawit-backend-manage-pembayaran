@@ -5,11 +5,13 @@ import com.mysawit.pembayaran.exception.InsufficientBalanceException;
 import com.mysawit.pembayaran.model.Wallet;
 import com.mysawit.pembayaran.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WalletServiceImpl implements WalletService {
@@ -52,6 +54,7 @@ public class WalletServiceImpl implements WalletService {
         Wallet wallet = walletRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Wallet not found for user: " + userId));
         if (wallet.getBalance() < amount) {
+            log.warn("Insufficient balance for user {}: has {}, needs {}", userId, wallet.getBalance(), amount);
             throw new InsufficientBalanceException(
                     "Insufficient balance: current " + wallet.getBalance() + ", requested " + amount);
         }
