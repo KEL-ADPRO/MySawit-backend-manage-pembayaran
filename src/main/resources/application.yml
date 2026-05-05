@@ -36,9 +36,12 @@ management:
     health:
       probes:
         enabled: true
+      show-details: never
   health:
-    db:
+    defaults:
       enabled: false
+    ping:
+      enabled: true
     livenessstate:
       enabled: true
     readinessstate:
