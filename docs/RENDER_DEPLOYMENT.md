@@ -18,7 +18,7 @@ diinjeksikan oleh Render melalui dashboard.
 | `DATABASE_URL`         | (lihat default)    | Fallback bila `JDBC_DATABASE_URL` tidak tersedia.                 |
 | `DB_USERNAME`          | `postgres`         | Username basis data.                                              |
 | `DB_PASSWORD`          | `postgres`         | Password basis data.                                              |
-| `JPA_DDL_AUTO`         | `update`           | Strategi DDL Hibernate. Untuk Render/production gunakan `validate` setelah skema benar. |
+| `JPA_DDL_AUTO`         | `update`           | Strategi DDL Hibernate. Set `create` sekali untuk reset skema.    |
 | `XENDIT_API_KEY`       | (kosong)           | Kredensial Xendit untuk integrasi pembayaran.                     |
 
 ## 2. Konfigurasi Service di Render
@@ -33,7 +33,7 @@ diinjeksikan oleh Render melalui dashboard.
    JDBC_DATABASE_URL=<JDBC URL dari panel Postgres Render>
    DB_USERNAME=<username Postgres Render>
    DB_PASSWORD=<password Postgres Render>
-   JPA_DDL_AUTO=validate
+   JPA_DDL_AUTO=update
    XENDIT_API_KEY=<api key sandbox/production>
    ```
 
@@ -45,9 +45,7 @@ diinjeksikan oleh Render melalui dashboard.
 
 Hibernate dengan `ddl-auto=update` tidak dapat mengubah tipe kolom existing
 menjadi `uuid` di PostgreSQL karena memerlukan klausa `USING id::uuid` yang
-tidak digenerasi otomatis. Kasus ini biasanya terjadi bila tabel sudah pernah
-dibuat dengan tipe `id` lama, lalu entity Java berubah menjadi `UUID`.
-Bila log Render menampilkan pesan berikut:
+tidak digenerasi otomatis. Bila log Render menampilkan pesan berikut:
 
 ```
 ERROR: column "id" cannot be cast automatically to type uuid
@@ -55,23 +53,21 @@ ERROR: column "id" cannot be cast automatically to type uuid
 ```
 
 maka skema yang ada tidak konsisten dengan entity terbaru dan perlu
-direkonstruksi atau dimigrasikan manual. Setelah skema sudah benar, set
-`JPA_DDL_AUTO=validate` di Render supaya aplikasi gagal cepat bila schema tidak
-cocok, bukan mencoba mengubah tabel production secara otomatis.
+direkonstruksi.
 
-### 3.1 Opsi A — Reset Skema via Environment Variable
+### 3.1 Opsi A — Reset Skema via Environment Variable (Direkomendasikan)
 
 1. Buka dashboard Render → service backend → tab **Environment**.
 2. Ubah nilai `JPA_DDL_AUTO` dari `update` menjadi `create`.
 3. Klik **Save Changes**; Render akan men-trigger redeploy otomatis.
 4. Tunggu hingga log menampilkan `Started PembayaranApplication ...` tanpa
    error DDL.
-5. Kembalikan `JPA_DDL_AUTO` ke `validate` lalu **Save Changes** sekali lagi
-   supaya redeploy berikutnya tidak kembali menghapus atau mengubah tabel.
+5. Kembalikan `JPA_DDL_AUTO` ke `update` lalu **Save Changes** sekali lagi
+   supaya redeploy berikutnya tidak kembali menghapus tabel.
 
 > **Catatan**: Strategi `create` akan menghapus seluruh data pada tabel yang
-> dikelola Hibernate. Pakai opsi ini hanya bila data di database Render aman
-> untuk dibuang.
+> dikelola Hibernate. Karena modul ini masih dalam tahap akademis dan tidak
+> menyimpan data produksi, langkah tersebut aman dilakukan.
 
 ### 3.2 Opsi B — Drop Tabel Manual via psql Shell
 
@@ -88,22 +84,6 @@ cocok, bukan mencoba mengubah tabel production secara otomatis.
 
 3. Trigger redeploy manual dari dashboard Render (tombol **Manual Deploy**).
 4. Hibernate akan membuat ulang seluruh tabel dengan tipe `uuid` yang benar.
-
-### 3.3 Opsi C — Migrasi Kolom Manual Tanpa Drop Semua Data
-
-Gunakan opsi ini bila data existing masih perlu dipertahankan dan isi kolom
-`id` sudah berupa teks UUID valid.
-
-```sql
-ALTER TABLE payrolls ALTER COLUMN id TYPE uuid USING id::uuid;
-ALTER TABLE wallets ALTER COLUMN id TYPE uuid USING id::uuid;
-ALTER TABLE topup_transactions ALTER COLUMN id TYPE uuid USING id::uuid;
-ALTER TABLE wage_config ALTER COLUMN id TYPE uuid USING id::uuid;
-```
-
-Jika ada foreign key yang mengarah ke kolom tersebut, drop constraint sementara,
-ubah tipe kolom terkait dengan `USING <column>::uuid`, lalu buat ulang
-constraint. Backup database sebelum menjalankan migrasi manual.
 
 ## 4. Verifikasi Pasca Deploy
 
