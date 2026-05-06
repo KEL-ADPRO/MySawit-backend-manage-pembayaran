@@ -11,7 +11,7 @@ spring:
       initialization-fail-timeout: -1
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${JPA_DDL_AUTO:update}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -24,7 +24,7 @@ spring:
       allowed-headers: "*"
 
 server:
-  port: ${PORT:8080}
+  port: ${PORT:8085}
   address: 0.0.0.0
 
 management:
