@@ -156,4 +156,57 @@ class PayrollControllerTest {
                         .header("X-User-Role", "WORKER"))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void getPayrollById_invalidUUID_shouldReturn400ValidationFailed() throws Exception {
+        mockMvc.perform(get("/api/pembayaran/payroll/{id}", "not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors.id").exists());
+    }
+
+    @Test
+    void getPayrolls_invalidStatus_shouldReturn400ValidationFailed() throws Exception {
+        mockMvc.perform(get("/api/pembayaran/payroll").param("status", "BOGUS"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors.status").exists());
+    }
+
+    @Test
+    void createPayroll_invalidRole_shouldReturn400ValidationFailed() throws Exception {
+        String body = "{\"userId\":\"" + UUID.randomUUID()
+                + "\",\"userRole\":\"NOT_A_ROLE\",\"kilogram\":10.0}";
+
+        mockMvc.perform(post("/api/pembayaran/payroll")
+                        .header("X-User-Id", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors.userRole").exists());
+    }
+
+    @Test
+    void createPayroll_missingFields_shouldReturn400ValidationFailed() throws Exception {
+        mockMvc.perform(post("/api/pembayaran/payroll")
+                        .header("X-User-Id", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors.userId").exists())
+                .andExpect(jsonPath("$.fieldErrors.userRole").exists());
+    }
+
+    @Test
+    void createPayroll_malformedJson_shouldReturn400ValidationFailed() throws Exception {
+        mockMvc.perform(post("/api/pembayaran/payroll")
+                        .header("X-User-Id", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{not json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors.body").exists());
+    }
 }
