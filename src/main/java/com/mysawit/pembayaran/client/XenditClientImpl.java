@@ -26,7 +26,11 @@ public class XenditClientImpl implements XenditClient {
     }
 
     @Override
-    public Map<String, Object> createInvoice(String externalId, double amountRupiah, String description) {
+    public Map<String, Object> createInvoice(String externalId,
+                                             double amountRupiah,
+                                             String description,
+                                             String successRedirectUrl,
+                                             String failureRedirectUrl) {
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("XENDIT_API_KEY not set — returning mock invoice for {}", externalId);
             Map<String, Object> mock = new HashMap<>();
@@ -43,6 +47,12 @@ public class XenditClientImpl implements XenditClient {
         body.put("external_id", externalId);
         body.put("amount", amountRupiah);
         body.put("description", description);
+        if (successRedirectUrl != null && !successRedirectUrl.isBlank()) {
+            body.put("success_redirect_url", successRedirectUrl);
+        }
+        if (failureRedirectUrl != null && !failureRedirectUrl.isBlank()) {
+            body.put("failure_redirect_url", failureRedirectUrl);
+        }
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", basicAuth);
