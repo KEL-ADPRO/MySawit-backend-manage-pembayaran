@@ -43,7 +43,12 @@ public class WalletServiceImpl implements WalletService {
     @Override
     public WalletResponse addBalance(UUID userId, double amount) {
         Wallet wallet = walletRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Wallet not found for user: " + userId));
+                .orElseGet(() -> Wallet.builder()
+                        .userId(userId)
+                        .balance(0.0)
+                        .createdAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now())
+                        .build());
         wallet.setBalance(wallet.getBalance() + amount);
         wallet.setUpdatedAt(LocalDateTime.now());
         return toResponse(walletRepository.save(wallet));
@@ -52,7 +57,11 @@ public class WalletServiceImpl implements WalletService {
     @Override
     public WalletResponse deductBalance(UUID userId, double amount) {
         Wallet wallet = walletRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Wallet not found for user: " + userId));
+                .orElseThrow(() -> {
+                    log.warn("Deduct requested for non-existent wallet user {}", userId);
+                    return new InsufficientBalanceException(
+                            "Insufficient balance: wallet not found for user " + userId);
+                });
         if (wallet.getBalance() < amount) {
             log.warn("Insufficient balance for user {}: has {}, needs {}", userId, wallet.getBalance(), amount);
             throw new InsufficientBalanceException(
