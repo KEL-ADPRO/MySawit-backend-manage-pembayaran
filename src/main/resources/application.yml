@@ -55,3 +55,8 @@ springdoc:
 
 xendit:
   api-key: ${XENDIT_API_KEY:}
+  callback-token: ${XENDIT_CALLBACK_TOKEN:}
+  success-redirect-url: ${XENDIT_SUCCESS_REDIRECT_URL:}
+  failure-redirect-url: ${XENDIT_FAILURE_REDIRECT_URL:}
+  exchange-rate: ${XENDIT_EXCHANGE_RATE:10000}
+  amount-step: ${XENDIT_AMOUNT_STEP:10000}

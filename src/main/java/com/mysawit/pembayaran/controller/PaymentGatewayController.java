@@ -5,18 +5,24 @@ import com.mysawit.pembayaran.dto.response.TopUpResponse;
 import com.mysawit.pembayaran.service.PaymentGatewayService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/pembayaran/wallet/topup")
 @RequiredArgsConstructor
 public class PaymentGatewayController {
 
     private final PaymentGatewayService paymentGatewayService;
+
+    @Value("${xendit.callback-token:}")
+    private String callbackToken;
 
     @PostMapping
     public ResponseEntity<TopUpResponse> initiateTopUp(
@@ -29,7 +35,15 @@ public class PaymentGatewayController {
     }
 
     @PostMapping("/callback")
-    public ResponseEntity<Void> handleCallback(@RequestBody Map<String, Object> payload) {
+    public ResponseEntity<Void> handleCallback(
+            @RequestHeader(value = "x-callback-token", required = false) String incomingToken,
+            @RequestBody Map<String, Object> payload) {
+        if (callbackToken != null && !callbackToken.isBlank()) {
+            if (incomingToken == null || !callbackToken.equals(incomingToken)) {
+                log.warn("Rejected Xendit callback for external_id={} — token mismatch", payload.get("external_id"));
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+        }
         paymentGatewayService.handleCallback(payload);
         return ResponseEntity.ok().build();
     }

@@ -9,6 +9,7 @@ import com.mysawit.pembayaran.repository.TopUpTransactionRepository;
 import com.mysawit.pembayaran.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,25 +23,38 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PaymentGatewayServiceImpl implements PaymentGatewayService {
 
-    private static final double EXCHANGE_RATE = 10000.0;
-
     private final TopUpTransactionRepository topUpTransactionRepository;
     private final WalletRepository walletRepository;
     private final XenditClient xenditClient;
 
+    @Value("${xendit.exchange-rate:10000}")
+    private double exchangeRate;
+
+    @Value("${xendit.amount-step:10000}")
+    private double amountStep;
+
+    @Value("${xendit.success-redirect-url:}")
+    private String successRedirectUrl;
+
+    @Value("${xendit.failure-redirect-url:}")
+    private String failureRedirectUrl;
+
     @Override
     @Transactional
     public TopUpResponse initiateTopUp(TopUpRequest request) {
-        if (request.getAmountRupiah() <= 0 || request.getAmountRupiah() % EXCHANGE_RATE != 0) {
+        if (request.getAmountRupiah() <= 0 || request.getAmountRupiah() % amountStep != 0) {
             throw new IllegalArgumentException(
-                    "amountRupiah must be a positive multiple of 10000, got: " + request.getAmountRupiah());
+                    "amountRupiah must be a positive multiple of " + (long) amountStep
+                            + ", got: " + request.getAmountRupiah());
         }
 
-        double amountSawitDollar = request.getAmountRupiah() / EXCHANGE_RATE;
+        double amountSawitDollar = request.getAmountRupiah() / exchangeRate;
         String externalId = UUID.randomUUID().toString();
         String description = String.format("TopUp %.0f IDR = %.1f SawitDollar", request.getAmountRupiah(), amountSawitDollar);
 
-        Map<String, Object> xenditResponse = xenditClient.createInvoice(externalId, request.getAmountRupiah(), description);
+        Map<String, Object> xenditResponse = xenditClient.createInvoice(
+                externalId, request.getAmountRupiah(), description,
+                successRedirectUrl, failureRedirectUrl);
 
         String paymentGatewayRef = (String) xenditResponse.getOrDefault("external_id", externalId);
         String paymentUrl = (String) xenditResponse.getOrDefault("invoice_url", "");
@@ -81,6 +95,12 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
         }
 
         TopUpTransaction tx = txOpt.get();
+
+        if (tx.getStatus() != TopUpStatus.PENDING) {
+            log.info("Ignoring duplicate callback for external_id={} — already in terminal state {}",
+                    externalId, tx.getStatus());
+            return;
+        }
 
         if ("PAID".equals(status)) {
             tx.setStatus(TopUpStatus.SUCCESS);
