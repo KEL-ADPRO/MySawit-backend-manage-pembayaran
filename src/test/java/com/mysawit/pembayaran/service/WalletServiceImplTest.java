@@ -132,4 +132,27 @@ class WalletServiceImplTest {
 
         assertThat(result.getBalance()).isEqualTo(0.0);
     }
+
+    @Test
+    void addBalance_walletMissing_shouldLazyCreate() {
+        UUID userId = UUID.randomUUID();
+        when(walletRepository.findByUserId(userId)).thenReturn(Optional.empty());
+        when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        WalletResponse result = walletService.addBalance(userId, 250.0);
+
+        assertThat(result.getUserId()).isEqualTo(userId);
+        assertThat(result.getBalance()).isEqualTo(250.0);
+        verify(walletRepository).save(any(Wallet.class));
+    }
+
+    @Test
+    void deductBalance_walletMissing_shouldThrowInsufficientBalance() {
+        UUID userId = UUID.randomUUID();
+        when(walletRepository.findByUserId(userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> walletService.deductBalance(userId, 100.0))
+                .isInstanceOf(InsufficientBalanceException.class);
+        verify(walletRepository, never()).save(any());
+    }
 }
