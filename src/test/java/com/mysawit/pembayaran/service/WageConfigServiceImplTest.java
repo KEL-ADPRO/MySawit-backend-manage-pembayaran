@@ -36,7 +36,7 @@ class WageConfigServiceImplTest {
                 .mandorWagePerKg(2000.0)
                 .updatedAt(LocalDateTime.now())
                 .build();
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(config));
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(config));
 
         WageConfigResponse result = wageConfigService.getWageConfig();
 
@@ -47,7 +47,7 @@ class WageConfigServiceImplTest {
 
     @Test
     void getConfig_notExists_shouldAutoCreateDefault() {
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.empty());
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.empty());
         when(wageConfigRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         WageConfigResponse result = wageConfigService.getWageConfig();
@@ -67,7 +67,7 @@ class WageConfigServiceImplTest {
                 .mandorWagePerKg(2000.0)
                 .updatedAt(LocalDateTime.now())
                 .build();
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(existing));
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(existing));
         when(wageConfigRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         UpdateWageConfigRequest request = new UpdateWageConfigRequest();
@@ -91,5 +91,50 @@ class WageConfigServiceImplTest {
 
         assertThatThrownBy(() -> wageConfigService.updateWageConfig(request))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getConfig_shouldDelegateToLatestUpdatedRow() {
+        WageConfig latest = WageConfig.builder()
+                .id(UUID.randomUUID())
+                .buruhWagePerKg(7777.0)
+                .supirTrukWagePerKg(8888.0)
+                .mandorWagePerKg(9999.0)
+                .updatedAt(LocalDateTime.now())
+                .build();
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(latest));
+
+        WageConfigResponse result = wageConfigService.getWageConfig();
+
+        verify(wageConfigRepository).findTopByOrderByUpdatedAtDesc();
+        assertThat(result.getBuruhWagePerKg()).isEqualTo(7777.0);
+        assertThat(result.getSupirTrukWagePerKg()).isEqualTo(8888.0);
+        assertThat(result.getMandorWagePerKg()).isEqualTo(9999.0);
+    }
+
+    @Test
+    void updateConfig_shouldUpdateLatestRowInPlace() {
+        UUID latestId = UUID.randomUUID();
+        WageConfig latest = WageConfig.builder()
+                .id(latestId)
+                .buruhWagePerKg(1000.0)
+                .supirTrukWagePerKg(1500.0)
+                .mandorWagePerKg(2000.0)
+                .updatedAt(LocalDateTime.now())
+                .build();
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(latest));
+        when(wageConfigRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateWageConfigRequest request = new UpdateWageConfigRequest();
+        request.setBuruhWagePerKg(5000.0);
+        request.setSupirTrukWagePerKg(6000.0);
+        request.setMandorWagePerKg(7000.0);
+
+        WageConfigResponse result = wageConfigService.updateWageConfig(request);
+
+        assertThat(result.getId()).isEqualTo(latestId);
+        assertThat(result.getBuruhWagePerKg()).isEqualTo(5000.0);
+        assertThat(result.getSupirTrukWagePerKg()).isEqualTo(6000.0);
+        assertThat(result.getMandorWagePerKg()).isEqualTo(7000.0);
     }
 }
