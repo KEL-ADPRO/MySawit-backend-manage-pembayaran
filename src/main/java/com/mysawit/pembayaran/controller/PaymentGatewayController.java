@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -27,10 +28,18 @@ public class PaymentGatewayController {
     @PostMapping
     public ResponseEntity<TopUpResponse> initiateTopUp(
             @RequestHeader(value = "X-User-Role", required = false) String userRole,
+            @RequestHeader(value = "X-User-Id", required = false) UUID requesterId,
             @Valid @RequestBody TopUpRequest request) {
         if (!RequestAuthorization.isAdmin(userRole)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
+        if (requesterId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        if (request.getUserId() != null && !requesterId.equals(request.getUserId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        request.setUserId(requesterId);
         return ResponseEntity.status(HttpStatus.CREATED).body(paymentGatewayService.initiateTopUp(request));
     }
 

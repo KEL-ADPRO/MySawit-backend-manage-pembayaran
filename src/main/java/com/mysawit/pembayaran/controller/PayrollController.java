@@ -35,11 +35,23 @@ public class PayrollController {
 
     @GetMapping
     public ResponseEntity<List<PayrollResponse>> getPayrolls(
+            @RequestHeader(value = "X-User-Role", required = false) String userRole,
+            @RequestHeader(value = "X-User-Id", required = false) UUID requesterId,
             @RequestParam(required = false) PayrollStatus status,
             @RequestParam(required = false) UUID userId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
-        return ResponseEntity.ok(payrollService.getPayrolls(status, userId, startDate, endDate));
+        UUID effectiveUserId = userId;
+        if (!RequestAuthorization.isAdmin(userRole)) {
+            if (requesterId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            if (userId != null && !requesterId.equals(userId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            effectiveUserId = requesterId;
+        }
+        return ResponseEntity.ok(payrollService.getPayrolls(status, effectiveUserId, startDate, endDate));
     }
 
     @GetMapping("/{id}")
@@ -50,17 +62,25 @@ public class PayrollController {
     @PutMapping("/{id}/approve")
     public ResponseEntity<PayrollResponse> approvePayroll(
             @PathVariable UUID id,
-            @RequestHeader(value = "X-User-Role", required = false) String userRole) {
+            @RequestHeader(value = "X-User-Role", required = false) String userRole,
+            @RequestHeader(value = "X-User-Id", required = false) UUID requesterId) {
         if (!RequestAuthorization.isAdmin(userRole)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        return ResponseEntity.ok(payrollService.approvePayroll(id));
+        if (requesterId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(payrollService.approvePayroll(id, requesterId));
     }
 
     @PutMapping("/{id}/reject")
     public ResponseEntity<PayrollResponse> rejectPayroll(
             @PathVariable UUID id,
+            @RequestHeader(value = "X-User-Role", required = false) String userRole,
             @Valid @RequestBody RejectPayrollRequest request) {
+        if (!RequestAuthorization.isAdmin(userRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         return ResponseEntity.ok(payrollService.rejectPayroll(id, request));
     }
 }

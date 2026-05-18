@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -70,13 +71,91 @@ class PayrollControllerTest {
     }
 
     @Test
-    void getPayrolls_shouldReturn200() throws Exception {
-        when(payrollService.getPayrolls(any(), any(), any(), any()))
+    void getPayrolls_adminCanListSelectedUserWithStatusAndDate_shouldReturn200() throws Exception {
+        UUID userId = UUID.randomUUID();
+        LocalDateTime startDate = LocalDateTime.of(2025, 1, 1, 0, 0);
+        LocalDateTime endDate = LocalDateTime.of(2025, 1, 31, 23, 59);
+        when(payrollService.getPayrolls(eq(PayrollStatus.PENDING), eq(userId), eq(startDate), eq(endDate)))
                 .thenReturn(List.of(buildResponse(UUID.randomUUID(), PayrollStatus.PENDING)));
 
-        mockMvc.perform(get("/api/pembayaran/payroll"))
+        mockMvc.perform(get("/api/pembayaran/payroll")
+                        .header("X-User-Role", "ADMIN")
+                        .param("userId", userId.toString())
+                        .param("status", "PENDING")
+                        .param("startDate", "2025-01-01T00:00:00")
+                        .param("endDate", "2025-01-31T23:59:00"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
+
+        verify(payrollService).getPayrolls(PayrollStatus.PENDING, userId, startDate, endDate);
+    }
+
+    @Test
+    void getPayrolls_buruhOmittingUserId_shouldDefaultToOwnPayroll() throws Exception {
+        UUID requesterId = UUID.randomUUID();
+        LocalDateTime startDate = LocalDateTime.of(2025, 2, 1, 0, 0);
+        when(payrollService.getPayrolls(eq(PayrollStatus.ACCEPTED), eq(requesterId), eq(startDate), any()))
+                .thenReturn(List.of(buildResponse(UUID.randomUUID(), PayrollStatus.ACCEPTED)));
+
+        mockMvc.perform(get("/api/pembayaran/payroll")
+                        .header("X-User-Role", "BURUH")
+                        .header("X-User-Id", requesterId.toString())
+                        .param("status", "ACCEPTED")
+                        .param("startDate", "2025-02-01T00:00:00"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        verify(payrollService).getPayrolls(PayrollStatus.ACCEPTED, requesterId, startDate, null);
+    }
+
+    @Test
+    void getPayrolls_supirTrukCanListOwnPayroll() throws Exception {
+        UUID requesterId = UUID.randomUUID();
+        LocalDateTime endDate = LocalDateTime.of(2025, 2, 28, 23, 59);
+        when(payrollService.getPayrolls(eq(PayrollStatus.ACCEPTED), eq(requesterId), any(), eq(endDate)))
+                .thenReturn(List.of(buildResponse(UUID.randomUUID(), PayrollStatus.ACCEPTED)));
+
+        mockMvc.perform(get("/api/pembayaran/payroll")
+                        .header("X-User-Role", "SUPIR_TRUK")
+                        .header("X-User-Id", requesterId.toString())
+                        .param("userId", requesterId.toString())
+                        .param("status", "ACCEPTED")
+                        .param("endDate", "2025-02-28T23:59:00"))
+                .andExpect(status().isOk());
+
+        verify(payrollService).getPayrolls(PayrollStatus.ACCEPTED, requesterId, null, endDate);
+    }
+
+    @Test
+    void getPayrolls_mandorCanListOwnPayroll() throws Exception {
+        UUID requesterId = UUID.randomUUID();
+        LocalDateTime startDate = LocalDateTime.of(2025, 3, 1, 0, 0);
+        when(payrollService.getPayrolls(eq(PayrollStatus.REJECTED), eq(requesterId), eq(startDate), any()))
+                .thenReturn(List.of(buildResponse(UUID.randomUUID(), PayrollStatus.REJECTED)));
+
+        mockMvc.perform(get("/api/pembayaran/payroll")
+                        .header("X-User-Role", "MANDOR")
+                        .header("X-User-Id", requesterId.toString())
+                        .param("userId", requesterId.toString())
+                        .param("status", "REJECTED")
+                        .param("startDate", "2025-03-01T00:00:00"))
+                .andExpect(status().isOk());
+
+        verify(payrollService).getPayrolls(PayrollStatus.REJECTED, requesterId, startDate, null);
+    }
+
+    @Test
+    void getPayrolls_nonAdminCannotListAnotherUser_shouldReturn403() throws Exception {
+        UUID requesterId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/pembayaran/payroll")
+                        .header("X-User-Role", "BURUH")
+                        .header("X-User-Id", requesterId.toString())
+                        .param("userId", otherUserId.toString()))
+                .andExpect(status().isForbidden());
+
+        verify(payrollService, never()).getPayrolls(any(), any(), any(), any());
     }
 
     @Test
@@ -101,10 +180,12 @@ class PayrollControllerTest {
     @Test
     void approvePayroll_shouldReturn200() throws Exception {
         UUID id = UUID.randomUUID();
-        when(payrollService.approvePayroll(id)).thenReturn(buildResponse(id, PayrollStatus.ACCEPTED));
+        UUID adminId = UUID.randomUUID();
+        when(payrollService.approvePayroll(id, adminId)).thenReturn(buildResponse(id, PayrollStatus.ACCEPTED));
 
         mockMvc.perform(put("/api/pembayaran/payroll/{id}/approve", id)
-                        .header("X-User-Role", "ADMIN"))
+                        .header("X-User-Role", "ADMIN")
+                        .header("X-User-Id", adminId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACCEPTED"));
     }
@@ -112,11 +193,13 @@ class PayrollControllerTest {
     @Test
     void approvePayroll_insufficientBalance_shouldReturn400() throws Exception {
         UUID id = UUID.randomUUID();
-        when(payrollService.approvePayroll(id))
+        UUID adminId = UUID.randomUUID();
+        when(payrollService.approvePayroll(id, adminId))
                 .thenThrow(new InsufficientBalanceException("Insufficient balance"));
 
         mockMvc.perform(put("/api/pembayaran/payroll/{id}/approve", id)
-                        .header("X-User-Role", "ADMIN"))
+                        .header("X-User-Role", "ADMIN")
+                        .header("X-User-Id", adminId.toString()))
                 .andExpect(status().isBadRequest());
     }
 
@@ -130,6 +213,7 @@ class PayrollControllerTest {
                 .thenReturn(buildResponse(id, PayrollStatus.REJECTED));
 
         mockMvc.perform(put("/api/pembayaran/payroll/{id}/reject", id)
+                        .header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -143,8 +227,20 @@ class PayrollControllerTest {
         request.setRejectionReason("");
 
         mockMvc.perform(put("/api/pembayaran/payroll/{id}/reject", id)
+                        .header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectPayroll_nullReason_shouldReturn400() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        mockMvc.perform(put("/api/pembayaran/payroll/{id}/reject", id)
+                        .header("X-User-Role", "ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -155,6 +251,30 @@ class PayrollControllerTest {
         mockMvc.perform(put("/api/pembayaran/payroll/{id}/approve", id)
                         .header("X-User-Role", "WORKER"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void approvePayroll_adminWithoutUserId_shouldReturn401() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        mockMvc.perform(put("/api/pembayaran/payroll/{id}/approve", id)
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void rejectPayroll_nonAdmin_shouldReturn403() throws Exception {
+        UUID id = UUID.randomUUID();
+        RejectPayrollRequest request = new RejectPayrollRequest();
+        request.setRejectionReason("Quality not met");
+
+        mockMvc.perform(put("/api/pembayaran/payroll/{id}/reject", id)
+                        .header("X-User-Role", "BURUH")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+
+        verify(payrollService, never()).rejectPayroll(any(), any());
     }
 
     @Test

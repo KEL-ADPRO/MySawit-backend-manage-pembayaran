@@ -47,21 +47,40 @@ class PaymentGatewayControllerTest {
     }
 
     @Test
-    void initiateTopUp_admin_shouldReturn201() throws Exception {
-        UUID userId = UUID.randomUUID();
+    void initiateTopUp_adminUsesHeaderUserId_shouldReturn201() throws Exception {
+        UUID adminId = UUID.randomUUID();
         TopUpRequest request = new TopUpRequest();
-        request.setUserId(userId);
         request.setAmountRupiah(100000.0);
 
-        when(paymentGatewayService.initiateTopUp(any())).thenReturn(buildTopUpResponse(userId));
+        when(paymentGatewayService.initiateTopUp(argThat(topUp -> adminId.equals(topUp.getUserId()))))
+                .thenReturn(buildTopUpResponse(adminId));
 
         mockMvc.perform(post("/api/pembayaran/wallet/topup")
                         .header("X-User-Role", "ADMIN")
+                        .header("X-User-Id", adminId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.userId").value(adminId.toString()))
                 .andExpect(jsonPath("$.amountSawitDollar").value(10.0));
+    }
+
+    @Test
+    void initiateTopUp_adminCannotTopUpAnotherUser_shouldReturn403() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        TopUpRequest request = new TopUpRequest();
+        request.setUserId(UUID.randomUUID());
+        request.setAmountRupiah(100000.0);
+
+        mockMvc.perform(post("/api/pembayaran/wallet/topup")
+                        .header("X-User-Role", "ADMIN")
+                        .header("X-User-Id", adminId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+
+        verify(paymentGatewayService, never()).initiateTopUp(any());
     }
 
     @Test
@@ -72,6 +91,7 @@ class PaymentGatewayControllerTest {
 
         mockMvc.perform(post("/api/pembayaran/wallet/topup")
                         .header("X-User-Role", "WORKER")
+                        .header("X-User-Id", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden());
@@ -92,6 +112,18 @@ class PaymentGatewayControllerTest {
     }
 
     @Test
+    void initiateTopUp_adminWithoutUserId_shouldReturn401() throws Exception {
+        TopUpRequest request = new TopUpRequest();
+        request.setAmountRupiah(100000.0);
+
+        mockMvc.perform(post("/api/pembayaran/wallet/topup")
+                        .header("X-User-Role", "ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void initiateTopUp_invalidAmount_shouldReturn400() throws Exception {
         TopUpRequest request = new TopUpRequest();
         request.setUserId(UUID.randomUUID());
@@ -102,6 +134,7 @@ class PaymentGatewayControllerTest {
 
         mockMvc.perform(post("/api/pembayaran/wallet/topup")
                         .header("X-User-Role", "ADMIN")
+                        .header("X-User-Id", request.getUserId().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());

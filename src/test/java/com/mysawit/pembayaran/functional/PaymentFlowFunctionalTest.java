@@ -7,7 +7,6 @@ import com.mysawit.pembayaran.repository.PayrollRepository;
 import com.mysawit.pembayaran.repository.TopUpTransactionRepository;
 import com.mysawit.pembayaran.repository.WageConfigRepository;
 import com.mysawit.pembayaran.repository.WalletRepository;
-import com.mysawit.pembayaran.service.PayrollServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,15 +78,15 @@ class PaymentFlowFunctionalTest {
 
     @Test
     void adminTopUpAndPayrollApprovalMoveBalancesAcrossWallets() {
-        UUID adminId = PayrollServiceImpl.ADMIN_USER_ID;
+        UUID adminId = UUID.randomUUID();
         UUID workerId = UUID.randomUUID();
 
-        createWallet(adminId);
         createWallet(workerId);
         updateWageConfig(2.0, 3.0, 4.0);
 
         JsonNode topUp = initiateTopUp(adminId, 1_000_000.0);
         assertThat(topUp.path("status").asText()).isEqualTo("PENDING");
+        assertThat(topUp.path("userId").asText()).isEqualTo(adminId.toString());
         assertThat(topUp.path("amountSawitDollar").asDouble()).isEqualTo(100.0);
 
         postWithHeaders(
@@ -102,14 +101,15 @@ class PaymentFlowFunctionalTest {
         assertThat(payroll.path("status").asText()).isEqualTo("PENDING");
         assertThat(payroll.path("amount").asDouble()).isEqualTo(72.0);
 
-        JsonNode approvedPayroll = approvePayroll(payroll.path("id").asText());
+        JsonNode approvedPayroll = approvePayroll(payroll.path("id").asText(), adminId);
         assertThat(approvedPayroll.path("status").asText()).isEqualTo("ACCEPTED");
 
         assertWalletBalance(adminId, 28.0);
         assertWalletBalance(workerId, 72.0);
 
-        ResponseEntity<JsonNode> acceptedPayrolls = get(
+        ResponseEntity<JsonNode> acceptedPayrolls = getWithHeaders(
                 "/api/pembayaran/payroll?status=ACCEPTED&userId=" + workerId,
+                Map.of("X-User-Role", "ADMIN"),
                 HttpStatus.OK
         );
         assertThat(acceptedPayrolls.getBody()).isNotNull();
@@ -133,7 +133,7 @@ class PaymentFlowFunctionalTest {
         postWithHeaders(
                 "/api/pembayaran/wallet/topup",
                 Map.of("userId", UUID.randomUUID(), "amountRupiah", 100_000.0),
-                Map.of("X-User-Role", "WORKER"),
+                Map.of("X-User-Role", "WORKER", "X-User-Id", UUID.randomUUID().toString()),
                 HttpStatus.FORBIDDEN
         );
 
@@ -149,10 +149,11 @@ class PaymentFlowFunctionalTest {
 
     @Test
     void validationErrorsReturnBadRequestBeforeStateChanges() {
+        UUID adminId = UUID.randomUUID();
         JsonNode invalidTopUp = postWithHeaders(
                 "/api/pembayaran/wallet/topup",
-                Map.of("userId", UUID.randomUUID(), "amountRupiah", 15_000.0),
-                Map.of("X-User-Role", "ADMIN"),
+                Map.of("userId", adminId, "amountRupiah", 15_000.0),
+                Map.of("X-User-Role", "ADMIN", "X-User-Id", adminId.toString()),
                 HttpStatus.BAD_REQUEST
         );
         assertThat(invalidTopUp.path("status").asInt()).isEqualTo(400);
@@ -166,6 +167,57 @@ class PaymentFlowFunctionalTest {
         );
         assertThat(invalidPayroll.path("error").asText()).isEqualTo("Validation failed");
         assertThat(payrollRepository.count()).isZero();
+    }
+
+    @Test
+    void supirTrukAndMandorPayrollsCanBeApprovedRejectedAndListedByOwner() {
+        UUID adminId = UUID.randomUUID();
+        UUID supirId = UUID.randomUUID();
+        UUID mandorId = UUID.randomUUID();
+
+        createWallet(supirId);
+        createWallet(mandorId);
+        updateWageConfig(2.0, 3.0, 4.0);
+
+        JsonNode topUp = initiateTopUp(adminId, 3_000_000.0);
+        postWithHeaders(
+                "/api/pembayaran/wallet/topup/callback",
+                Map.of("external_id", topUp.path("paymentGatewayRef").asText(), "status", "PAID"),
+                Map.of("x-callback-token", "functional-token"),
+                HttpStatus.OK
+        );
+
+        JsonNode supirPayroll = createPayroll(supirId, "SUPIR_TRUK", 50.0);
+        assertThat(supirPayroll.path("amount").asDouble()).isEqualTo(135.0);
+
+        JsonNode approvedSupirPayroll = approvePayroll(supirPayroll.path("id").asText(), adminId);
+        assertThat(approvedSupirPayroll.path("status").asText()).isEqualTo("ACCEPTED");
+        assertWalletBalance(adminId, 165.0);
+        assertWalletBalance(supirId, 135.0);
+
+        JsonNode mandorPayroll = createPayroll(mandorId, "MANDOR", 25.0);
+        assertThat(mandorPayroll.path("amount").asDouble()).isEqualTo(90.0);
+
+        JsonNode rejectedMandorPayroll = rejectPayroll(mandorPayroll.path("id").asText(), "Factory accepted weight changed");
+        assertThat(rejectedMandorPayroll.path("status").asText()).isEqualTo("REJECTED");
+        assertThat(rejectedMandorPayroll.path("rejectionReason").asText())
+                .isEqualTo("Factory accepted weight changed");
+
+        ResponseEntity<JsonNode> supirOwnPayrolls = getWithHeaders(
+                "/api/pembayaran/payroll?status=ACCEPTED&userId=" + supirId,
+                Map.of("X-User-Role", "SUPIR_TRUK", "X-User-Id", supirId.toString()),
+                HttpStatus.OK
+        );
+        assertThat(supirOwnPayrolls.getBody()).isNotNull();
+        assertThat(supirOwnPayrolls.getBody().size()).isEqualTo(1);
+
+        ResponseEntity<JsonNode> mandorOwnPayrolls = getWithHeaders(
+                "/api/pembayaran/payroll?status=REJECTED&userId=" + mandorId,
+                Map.of("X-User-Role", "MANDOR", "X-User-Id", mandorId.toString()),
+                HttpStatus.OK
+        );
+        assertThat(mandorOwnPayrolls.getBody()).isNotNull();
+        assertThat(mandorOwnPayrolls.getBody().size()).isEqualTo(1);
     }
 
     private void createWallet(UUID userId) {
@@ -197,8 +249,8 @@ class PaymentFlowFunctionalTest {
     private JsonNode initiateTopUp(UUID userId, double amountRupiah) {
         return postWithHeaders(
                 "/api/pembayaran/wallet/topup",
-                Map.of("userId", userId, "amountRupiah", amountRupiah),
-                Map.of("X-User-Role", "ADMIN"),
+                Map.of("amountRupiah", amountRupiah),
+                Map.of("X-User-Role", "ADMIN", "X-User-Id", userId.toString()),
                 HttpStatus.CREATED
         );
     }
@@ -212,10 +264,19 @@ class PaymentFlowFunctionalTest {
         );
     }
 
-    private JsonNode approvePayroll(String payrollId) {
+    private JsonNode approvePayroll(String payrollId, UUID adminId) {
         return putWithHeaders(
                 "/api/pembayaran/payroll/" + payrollId + "/approve",
                 Map.of(),
+                Map.of("X-User-Role", "ADMIN", "X-User-Id", adminId.toString()),
+                HttpStatus.OK
+        );
+    }
+
+    private JsonNode rejectPayroll(String payrollId, String reason) {
+        return putWithHeaders(
+                "/api/pembayaran/payroll/" + payrollId + "/reject",
+                Map.of("rejectionReason", reason),
                 Map.of("X-User-Role", "ADMIN"),
                 HttpStatus.OK
         );
@@ -229,6 +290,16 @@ class PaymentFlowFunctionalTest {
 
     private ResponseEntity<JsonNode> get(String path, HttpStatus expectedStatus) {
         ResponseEntity<JsonNode> response = restTemplate.getForEntity(path, JsonNode.class);
+        assertThat(response.getStatusCode()).isEqualTo(expectedStatus);
+        return response;
+    }
+
+    private ResponseEntity<JsonNode> getWithHeaders(
+            String path,
+            Map<String, String> headers,
+            HttpStatus expectedStatus
+    ) {
+        ResponseEntity<JsonNode> response = exchange(path, HttpMethod.GET, Map.of(), headers);
         assertThat(response.getStatusCode()).isEqualTo(expectedStatus);
         return response;
     }

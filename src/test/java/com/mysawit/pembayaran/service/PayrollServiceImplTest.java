@@ -57,10 +57,14 @@ class PayrollServiceImplTest {
     }
 
     private Payroll pendingPayroll(UUID id, UUID userId, double amount) {
+        return pendingPayroll(id, userId, UserRole.BURUH, amount);
+    }
+
+    private Payroll pendingPayroll(UUID id, UUID userId, UserRole role, double amount) {
         return Payroll.builder()
                 .id(id)
                 .userId(userId)
-                .userRole(UserRole.BURUH)
+                .userRole(role)
                 .amount(amount)
                 .kilogram(100.0)
                 .status(PayrollStatus.PENDING)
@@ -197,32 +201,44 @@ class PayrollServiceImplTest {
     @Test
     void approvePayroll_success() {
         UUID payrollId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         Payroll payroll = pendingPayroll(payrollId, userId, 1000.0);
         when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
         when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(walletService.deductBalance(PayrollServiceImpl.ADMIN_USER_ID, 1000.0))
+        when(walletService.deductBalance(adminId, 1000.0))
                 .thenReturn(WalletResponse.builder().balance(4000.0).build());
         when(walletService.addBalance(userId, 1000.0))
                 .thenReturn(WalletResponse.builder().balance(1000.0).build());
 
-        PayrollResponse result = payrollService.approvePayroll(payrollId);
+        PayrollResponse result = payrollService.approvePayroll(payrollId, adminId);
 
         assertThat(result.getStatus()).isEqualTo(PayrollStatus.ACCEPTED);
-        verify(walletService).deductBalance(PayrollServiceImpl.ADMIN_USER_ID, 1000.0);
+        verify(walletService).deductBalance(adminId, 1000.0);
         verify(walletService).addBalance(userId, 1000.0);
+    }
+
+    @Test
+    void approvePayroll_supirTruk_success() {
+        assertApprovePayrollForRole(UserRole.SUPIR_TRUK);
+    }
+
+    @Test
+    void approvePayroll_mandor_success() {
+        assertApprovePayrollForRole(UserRole.MANDOR);
     }
 
     @Test
     void approvePayroll_insufficientBalance_shouldThrow() {
         UUID payrollId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         Payroll payroll = pendingPayroll(payrollId, userId, 1000.0);
         when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
         doThrow(new InsufficientBalanceException("Insufficient balance"))
-                .when(walletService).deductBalance(PayrollServiceImpl.ADMIN_USER_ID, 1000.0);
+                .when(walletService).deductBalance(adminId, 1000.0);
 
-        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId))
+        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId, adminId))
                 .isInstanceOf(InsufficientBalanceException.class);
     }
 
@@ -241,7 +257,26 @@ class PayrollServiceImplTest {
                 .build();
         when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
 
-        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId))
+        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId, UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void approvePayroll_rejected_shouldThrow() {
+        UUID payrollId = UUID.randomUUID();
+        Payroll payroll = Payroll.builder()
+                .id(payrollId)
+                .userId(UUID.randomUUID())
+                .status(PayrollStatus.REJECTED)
+                .amount(1000.0)
+                .kilogram(100.0)
+                .userRole(UserRole.BURUH)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
+
+        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId, UUID.randomUUID()))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -250,7 +285,7 @@ class PayrollServiceImplTest {
         UUID payrollId = UUID.randomUUID();
         when(payrollRepository.findById(payrollId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId))
+        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId, UUID.randomUUID()))
                 .isInstanceOf(PayrollNotFoundException.class);
     }
 
@@ -270,6 +305,16 @@ class PayrollServiceImplTest {
         assertThat(result.getRejectionReason()).isEqualTo("Quality not met");
         verify(walletService, never()).deductBalance(any(), anyDouble());
         verify(walletService, never()).addBalance(any(), anyDouble());
+    }
+
+    @Test
+    void rejectPayroll_supirTruk_success() {
+        assertRejectPayrollForRole(UserRole.SUPIR_TRUK);
+    }
+
+    @Test
+    void rejectPayroll_mandor_success() {
+        assertRejectPayrollForRole(UserRole.MANDOR);
     }
 
     @Test
@@ -305,6 +350,44 @@ class PayrollServiceImplTest {
 
         assertThatThrownBy(() -> payrollService.rejectPayroll(payrollId, request))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    private void assertApprovePayrollForRole(UserRole role) {
+        UUID payrollId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Payroll payroll = pendingPayroll(payrollId, userId, role, 1000.0);
+        when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
+        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(walletService.deductBalance(adminId, 1000.0))
+                .thenReturn(WalletResponse.builder().balance(4000.0).build());
+        when(walletService.addBalance(userId, 1000.0))
+                .thenReturn(WalletResponse.builder().balance(1000.0).build());
+
+        PayrollResponse result = payrollService.approvePayroll(payrollId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(PayrollStatus.ACCEPTED);
+        assertThat(result.getUserRole()).isEqualTo(role);
+        verify(walletService).deductBalance(adminId, 1000.0);
+        verify(walletService).addBalance(userId, 1000.0);
+    }
+
+    private void assertRejectPayrollForRole(UserRole role) {
+        UUID payrollId = UUID.randomUUID();
+        Payroll payroll = pendingPayroll(payrollId, UUID.randomUUID(), role, 1000.0);
+        when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
+        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RejectPayrollRequest request = new RejectPayrollRequest();
+        request.setRejectionReason("Quality not met");
+
+        PayrollResponse result = payrollService.rejectPayroll(payrollId, request);
+
+        assertThat(result.getStatus()).isEqualTo(PayrollStatus.REJECTED);
+        assertThat(result.getUserRole()).isEqualTo(role);
+        assertThat(result.getRejectionReason()).isEqualTo("Quality not met");
+        verify(walletService, never()).deductBalance(any(), anyDouble());
+        verify(walletService, never()).addBalance(any(), anyDouble());
     }
 
     // ─── LIST / DETAIL TESTS ────────────────────────────────────────────────

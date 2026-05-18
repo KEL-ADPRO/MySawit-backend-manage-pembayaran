@@ -26,8 +26,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PayrollServiceImpl implements PayrollService {
 
-    public static final UUID ADMIN_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-
     private final PayrollRepository payrollRepository;
     private final WageConfigRepository wageConfigRepository;
     private final WageCalculatorFactory wageCalculatorFactory;
@@ -62,13 +60,13 @@ public class PayrollServiceImpl implements PayrollService {
 
     @Override
     @Transactional
-    public PayrollResponse approvePayroll(UUID id) {
+    public PayrollResponse approvePayroll(UUID id, UUID adminUserId) {
         Payroll payroll = findOrThrow(id);
         if (payroll.getStatus() != PayrollStatus.PENDING) {
             throw new IllegalStateException("Only PENDING payrolls can be approved");
         }
         log.info("Approving payroll {} for user {}, amount {}", id, payroll.getUserId(), payroll.getAmount());
-        walletService.deductBalance(ADMIN_USER_ID, payroll.getAmount());
+        walletService.deductBalance(adminUserId, payroll.getAmount());
         walletService.addBalance(payroll.getUserId(), payroll.getAmount());
         payroll.setStatus(PayrollStatus.ACCEPTED);
         payroll.setUpdatedAt(LocalDateTime.now());

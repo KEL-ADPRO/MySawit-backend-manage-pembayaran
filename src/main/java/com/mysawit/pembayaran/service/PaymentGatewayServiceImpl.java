@@ -5,6 +5,7 @@ import com.mysawit.pembayaran.client.PaymentInvoice;
 import com.mysawit.pembayaran.dto.request.TopUpRequest;
 import com.mysawit.pembayaran.dto.response.TopUpResponse;
 import com.mysawit.pembayaran.model.TopUpTransaction;
+import com.mysawit.pembayaran.model.Wallet;
 import com.mysawit.pembayaran.model.enums.TopUpStatus;
 import com.mysawit.pembayaran.repository.TopUpTransactionRepository;
 import com.mysawit.pembayaran.repository.WalletRepository;
@@ -101,16 +102,22 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
         }
 
         if ("PAID".equals(status)) {
+            LocalDateTime now = LocalDateTime.now();
+            Wallet wallet = walletRepository.findByUserId(tx.getUserId())
+                    .orElseGet(() -> Wallet.builder()
+                            .userId(tx.getUserId())
+                            .balance(0.0)
+                            .createdAt(now)
+                            .updatedAt(now)
+                            .build());
+            wallet.setBalance(wallet.getBalance() + tx.getAmountSawitDollar());
+            wallet.setUpdatedAt(now);
+            walletRepository.save(wallet);
+
             tx.setStatus(TopUpStatus.SUCCESS);
             topUpTransactionRepository.save(tx);
 
-            walletRepository.findByUserId(tx.getUserId()).ifPresent(wallet -> {
-                wallet.setBalance(wallet.getBalance() + tx.getAmountSawitDollar());
-                wallet.setUpdatedAt(LocalDateTime.now());
-                walletRepository.save(wallet);
-            });
-
-        } else if ("EXPIRED".equals(status)) {
+        } else if ("EXPIRED".equals(status) || "FAILED".equals(status)) {
             tx.setStatus(TopUpStatus.FAILED);
             topUpTransactionRepository.save(tx);
         }

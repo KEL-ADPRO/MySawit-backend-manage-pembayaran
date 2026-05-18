@@ -178,6 +178,34 @@ class PaymentGatewayServiceImplTest {
     }
 
     @Test
+    void handleCallback_paidWithMissingWallet_shouldCreateWalletAndCreditBalance() {
+        UUID userId = UUID.randomUUID();
+        String externalId = UUID.randomUUID().toString();
+
+        TopUpTransaction tx = TopUpTransaction.builder()
+                .id(UUID.randomUUID()).userId(userId)
+                .amountRupiah(100000.0).amountSawitDollar(10.0)
+                .paymentGatewayRef(externalId).status(TopUpStatus.PENDING)
+                .createdAt(LocalDateTime.now()).build();
+
+        when(topUpTransactionRepository.findByPaymentGatewayRef(externalId)).thenReturn(Optional.of(tx));
+        when(walletRepository.findByUserId(userId)).thenReturn(Optional.empty());
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("external_id", externalId);
+        payload.put("status", "PAID");
+
+        paymentGatewayService.handleCallback(payload);
+
+        verify(walletRepository).save(argThat(w ->
+                userId.equals(w.getUserId())
+                        && w.getBalance() == 10.0
+                        && w.getCreatedAt() != null
+                        && w.getUpdatedAt() != null));
+        verify(topUpTransactionRepository).save(argThat(t -> t.getStatus() == TopUpStatus.SUCCESS));
+    }
+
+    @Test
     void handleCallback_expired_shouldSetFailed() {
         UUID userId = UUID.randomUUID();
         String externalId = UUID.randomUUID().toString();
@@ -199,6 +227,30 @@ class PaymentGatewayServiceImplTest {
 
         verify(topUpTransactionRepository).save(argThat(t -> t.getStatus() == TopUpStatus.FAILED));
         verify(walletRepository, never()).findByUserId(any());
+    }
+
+    @Test
+    void handleCallback_failed_shouldSetFailedWithoutCreditingWallet() {
+        UUID userId = UUID.randomUUID();
+        String externalId = UUID.randomUUID().toString();
+
+        TopUpTransaction tx = TopUpTransaction.builder()
+                .id(UUID.randomUUID()).userId(userId)
+                .amountRupiah(100000.0).amountSawitDollar(10.0)
+                .paymentGatewayRef(externalId).status(TopUpStatus.PENDING)
+                .createdAt(LocalDateTime.now()).build();
+
+        when(topUpTransactionRepository.findByPaymentGatewayRef(externalId)).thenReturn(Optional.of(tx));
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("external_id", externalId);
+        payload.put("status", "FAILED");
+
+        paymentGatewayService.handleCallback(payload);
+
+        verify(topUpTransactionRepository).save(argThat(t -> t.getStatus() == TopUpStatus.FAILED));
+        verify(walletRepository, never()).findByUserId(any());
+        verify(walletRepository, never()).save(any());
     }
 
     @Test
