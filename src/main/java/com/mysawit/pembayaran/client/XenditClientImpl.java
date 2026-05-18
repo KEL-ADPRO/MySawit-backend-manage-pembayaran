@@ -26,19 +26,14 @@ public class XenditClientImpl implements XenditClient {
     }
 
     @Override
-    public Map<String, Object> createInvoice(String externalId,
-                                             double amountRupiah,
-                                             String description,
-                                             String successRedirectUrl,
-                                             String failureRedirectUrl) {
+    public PaymentInvoice createInvoice(String externalId,
+                                        double amountRupiah,
+                                        String description,
+                                        String successRedirectUrl,
+                                        String failureRedirectUrl) {
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("XENDIT_API_KEY not set — returning mock invoice for {}", externalId);
-            Map<String, Object> mock = new HashMap<>();
-            mock.put("id", externalId);
-            mock.put("external_id", externalId);
-            mock.put("invoice_url", "https://mock-payment.xendit.co/pay/" + externalId);
-            mock.put("status", "PENDING");
-            return mock;
+            return new PaymentInvoice(externalId, "https://mock-payment.xendit.co/pay/" + externalId);
         }
 
         String basicAuth = "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes());
@@ -62,6 +57,12 @@ public class XenditClientImpl implements XenditClient {
         ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                 XENDIT_INVOICE_URL, HttpMethod.POST, entity,
                 new org.springframework.core.ParameterizedTypeReference<>() {});
-        return response.getBody();
+        return toPaymentInvoice(response.getBody(), externalId);
+    }
+
+    private PaymentInvoice toPaymentInvoice(Map<String, Object> responseBody, String fallbackExternalId) {
+        String externalId = (String) responseBody.getOrDefault("external_id", fallbackExternalId);
+        String paymentUrl = (String) responseBody.getOrDefault("invoice_url", "");
+        return new PaymentInvoice(externalId, paymentUrl);
     }
 }

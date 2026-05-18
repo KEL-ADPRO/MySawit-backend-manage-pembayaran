@@ -1,5 +1,6 @@
 package com.mysawit.pembayaran.service.strategy;
 
+import com.mysawit.pembayaran.model.WageConfig;
 import com.mysawit.pembayaran.model.enums.UserRole;
 import org.springframework.stereotype.Component;
 
@@ -18,10 +19,18 @@ public class WageCalculatorFactory {
     }
 
     public double calculate(UserRole role, double wagePerKg, double kilogram) {
+        return getStrategy(role).calculate(wagePerKg, kilogram);
+    }
+
+    public double getWagePerKg(UserRole role, WageConfig config) {
+        return getStrategy(role).getWagePerKg(config);
+    }
+
+    private WageCalculationStrategy getStrategy(UserRole role) {
         WageCalculationStrategy strategy = strategies.get(role);
         if (strategy == null) {
             throw new IllegalArgumentException("No wage strategy found for role: " + role);
         }
-        return strategy.calculate(wagePerKg, kilogram);
+        return strategy;
     }
 }

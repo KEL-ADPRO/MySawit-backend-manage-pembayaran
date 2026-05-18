@@ -1,6 +1,7 @@
 package com.mysawit.pembayaran.service;
 
 import com.mysawit.pembayaran.client.XenditClient;
+import com.mysawit.pembayaran.client.PaymentInvoice;
 import com.mysawit.pembayaran.dto.request.TopUpRequest;
 import com.mysawit.pembayaran.dto.response.TopUpResponse;
 import com.mysawit.pembayaran.model.TopUpTransaction;
@@ -52,18 +53,15 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
         String externalId = UUID.randomUUID().toString();
         String description = String.format("TopUp %.0f IDR = %.1f SawitDollar", request.getAmountRupiah(), amountSawitDollar);
 
-        Map<String, Object> xenditResponse = xenditClient.createInvoice(
+        PaymentInvoice invoice = xenditClient.createInvoice(
                 externalId, request.getAmountRupiah(), description,
                 successRedirectUrl, failureRedirectUrl);
-
-        String paymentGatewayRef = (String) xenditResponse.getOrDefault("external_id", externalId);
-        String paymentUrl = (String) xenditResponse.getOrDefault("invoice_url", "");
 
         TopUpTransaction tx = TopUpTransaction.builder()
                 .userId(request.getUserId())
                 .amountRupiah(request.getAmountRupiah())
                 .amountSawitDollar(amountSawitDollar)
-                .paymentGatewayRef(paymentGatewayRef)
+                .paymentGatewayRef(invoice.externalId())
                 .status(TopUpStatus.PENDING)
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -76,7 +74,7 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
                 .amountRupiah(saved.getAmountRupiah())
                 .amountSawitDollar(saved.getAmountSawitDollar())
                 .paymentGatewayRef(saved.getPaymentGatewayRef())
-                .paymentUrl(paymentUrl)
+                .paymentUrl(invoice.paymentUrl())
                 .status(saved.getStatus())
                 .createdAt(saved.getCreatedAt())
                 .build();

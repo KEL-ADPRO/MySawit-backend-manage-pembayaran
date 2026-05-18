@@ -1,5 +1,6 @@
 package com.mysawit.pembayaran.service;
 
+import com.mysawit.pembayaran.model.WageConfig;
 import com.mysawit.pembayaran.model.enums.UserRole;
 import com.mysawit.pembayaran.service.strategy.BuruhWageStrategy;
 import com.mysawit.pembayaran.service.strategy.MandorWageStrategy;
@@ -62,5 +63,18 @@ class WageCalculatorFactoryTest {
         assertThat(mandorResult).isEqualTo(9000.0);
 
         assertThat(buruhResult).isEqualTo(supirResult).isEqualTo(mandorResult);
+    }
+
+    @Test
+    void getWagePerKg_shouldDelegateRateSelectionToStrategy() {
+        WageConfig config = WageConfig.builder()
+                .buruhWagePerKg(1000.0)
+                .supirTrukWagePerKg(2000.0)
+                .mandorWagePerKg(3000.0)
+                .build();
+
+        assertThat(factory.getWagePerKg(UserRole.BURUH, config)).isEqualTo(1000.0);
+        assertThat(factory.getWagePerKg(UserRole.SUPIR_TRUK, config)).isEqualTo(2000.0);
+        assertThat(factory.getWagePerKg(UserRole.MANDOR, config)).isEqualTo(3000.0);
     }
 }
