@@ -74,9 +74,14 @@ class PayrollServiceImplTest {
     @Test
     void createPayroll_buruh_shouldCalculateCorrectAmount() {
         UUID userId = UUID.randomUUID();
+<<<<<<< HEAD
         WageConfig wageConfig = wageConfigWith(5000.0, 0, 0);
         when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(wageConfig));
         when(wageCalculatorFactory.getWagePerKg(UserRole.BURUH, wageConfig)).thenReturn(5000.0);
+=======
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc())
+                .thenReturn(Optional.of(wageConfigWith(5000.0, 0, 0)));
+>>>>>>> origin/staging
         when(wageCalculatorFactory.calculate(UserRole.BURUH, 5000.0, 100.0)).thenReturn(450000.0);
         when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -94,9 +99,14 @@ class PayrollServiceImplTest {
     @Test
     void createPayroll_supirTruk_shouldCalculateCorrectAmount() {
         UUID userId = UUID.randomUUID();
+<<<<<<< HEAD
         WageConfig wageConfig = wageConfigWith(0, 3000.0, 0);
         when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(wageConfig));
         when(wageCalculatorFactory.getWagePerKg(UserRole.SUPIR_TRUK, wageConfig)).thenReturn(3000.0);
+=======
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc())
+                .thenReturn(Optional.of(wageConfigWith(0, 3000.0, 0)));
+>>>>>>> origin/staging
         when(wageCalculatorFactory.calculate(UserRole.SUPIR_TRUK, 3000.0, 200.0)).thenReturn(540000.0);
         when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -113,9 +123,14 @@ class PayrollServiceImplTest {
     @Test
     void createPayroll_mandor_shouldCalculateCorrectAmount() {
         UUID userId = UUID.randomUUID();
+<<<<<<< HEAD
         WageConfig wageConfig = wageConfigWith(0, 0, 4000.0);
         when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(wageConfig));
         when(wageCalculatorFactory.getWagePerKg(UserRole.MANDOR, wageConfig)).thenReturn(4000.0);
+=======
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc())
+                .thenReturn(Optional.of(wageConfigWith(0, 0, 4000.0)));
+>>>>>>> origin/staging
         when(wageCalculatorFactory.calculate(UserRole.MANDOR, 4000.0, 150.0)).thenReturn(540000.0);
         when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -132,9 +147,14 @@ class PayrollServiceImplTest {
     @Test
     void createPayroll_shouldSetStatusPending() {
         UUID userId = UUID.randomUUID();
+<<<<<<< HEAD
         WageConfig wageConfig = wageConfigWith(5000.0, 0, 0);
         when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(wageConfig));
         when(wageCalculatorFactory.getWagePerKg(eq(UserRole.BURUH), eq(wageConfig))).thenReturn(5000.0);
+=======
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc())
+                .thenReturn(Optional.of(wageConfigWith(5000.0, 0, 0)));
+>>>>>>> origin/staging
         when(wageCalculatorFactory.calculate(any(), anyDouble(), anyDouble())).thenReturn(450000.0);
         when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -149,11 +169,37 @@ class PayrollServiceImplTest {
     }
 
     @Test
+    void createPayroll_shouldUseLatestWageConfig() {
+        UUID userId = UUID.randomUUID();
+        WageConfig latest = wageConfigWith(7000.0, 0, 0);
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc())
+                .thenReturn(Optional.of(latest));
+        when(wageCalculatorFactory.calculate(UserRole.BURUH, 7000.0, 50.0)).thenReturn(315000.0);
+        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        CreatePayrollRequest request = new CreatePayrollRequest();
+        request.setUserId(userId);
+        request.setUserRole(UserRole.BURUH);
+        request.setKilogram(50.0);
+
+        PayrollResponse result = payrollService.createPayroll(request);
+
+        verify(wageConfigRepository).findTopByOrderByUpdatedAtDesc();
+        verify(wageCalculatorFactory).calculate(UserRole.BURUH, 7000.0, 50.0);
+        assertThat(result.getAmount()).isEqualTo(315000.0);
+    }
+
+    @Test
     void createPayroll_shouldGenerateDescription() {
         UUID userId = UUID.randomUUID();
+<<<<<<< HEAD
         WageConfig wageConfig = wageConfigWith(5000.0, 0, 0);
         when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(wageConfig));
         when(wageCalculatorFactory.getWagePerKg(UserRole.BURUH, wageConfig)).thenReturn(5000.0);
+=======
+        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc())
+                .thenReturn(Optional.of(wageConfigWith(5000.0, 0, 0)));
+>>>>>>> origin/staging
         when(wageCalculatorFactory.calculate(UserRole.BURUH, 5000.0, 100.0)).thenReturn(450000.0);
         when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 

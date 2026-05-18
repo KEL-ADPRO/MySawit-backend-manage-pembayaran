@@ -35,7 +35,7 @@ public class PayrollServiceImpl implements PayrollService {
 
     @Override
     public PayrollResponse createPayroll(CreatePayrollRequest request) {
-        WageConfig config = wageConfigRepository.findFirstBy()
+        WageConfig config = wageConfigRepository.findTopByOrderByUpdatedAtDesc()
                 .orElse(WageConfig.builder()
                         .buruhWagePerKg(0).supirTrukWagePerKg(0).mandorWagePerKg(0)
                         .updatedAt(LocalDateTime.now()).build());
