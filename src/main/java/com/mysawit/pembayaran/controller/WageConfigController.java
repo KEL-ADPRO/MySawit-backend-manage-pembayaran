@@ -25,13 +25,9 @@ public class WageConfigController {
     public ResponseEntity<WageConfigResponse> updateWageConfig(
             @RequestHeader(value = "X-User-Role", required = false) String userRole,
             @Valid @RequestBody UpdateWageConfigRequest request) {
-        if (!isAdmin(userRole)) {
+        if (!RequestAuthorization.isAdmin(userRole)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return ResponseEntity.ok(wageConfigService.updateWageConfig(request));
-    }
-
-    private boolean isAdmin(String userRole) {
-        return "ADMIN".equals(userRole);
     }
 }

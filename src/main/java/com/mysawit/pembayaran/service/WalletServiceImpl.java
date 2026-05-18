@@ -2,6 +2,7 @@ package com.mysawit.pembayaran.service;
 
 import com.mysawit.pembayaran.dto.response.WalletResponse;
 import com.mysawit.pembayaran.exception.InsufficientBalanceException;
+import com.mysawit.pembayaran.exception.WalletNotFoundException;
 import com.mysawit.pembayaran.model.Wallet;
 import com.mysawit.pembayaran.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
@@ -42,8 +43,7 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     public WalletResponse addBalance(UUID userId, double amount) {
-        Wallet wallet = walletRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Wallet not found for user: " + userId));
+        Wallet wallet = findWalletByUserId(userId);
         wallet.setBalance(wallet.getBalance() + amount);
         wallet.setUpdatedAt(LocalDateTime.now());
         return toResponse(walletRepository.save(wallet));
@@ -51,8 +51,7 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     public WalletResponse deductBalance(UUID userId, double amount) {
-        Wallet wallet = walletRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Wallet not found for user: " + userId));
+        Wallet wallet = findWalletByUserId(userId);
         if (wallet.getBalance() < amount) {
             log.warn("Insufficient balance for user {}: has {}, needs {}", userId, wallet.getBalance(), amount);
             throw new InsufficientBalanceException(
@@ -61,6 +60,11 @@ public class WalletServiceImpl implements WalletService {
         wallet.setBalance(wallet.getBalance() - amount);
         wallet.setUpdatedAt(LocalDateTime.now());
         return toResponse(walletRepository.save(wallet));
+    }
+
+    private Wallet findWalletByUserId(UUID userId) {
+        return walletRepository.findByUserId(userId)
+                .orElseThrow(() -> new WalletNotFoundException(userId));
     }
 
     private WalletResponse toResponse(Wallet wallet) {

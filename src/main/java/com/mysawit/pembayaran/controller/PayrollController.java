@@ -51,7 +51,7 @@ public class PayrollController {
     public ResponseEntity<PayrollResponse> approvePayroll(
             @PathVariable UUID id,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
-        if (!isAdmin(userRole)) {
+        if (!RequestAuthorization.isAdmin(userRole)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return ResponseEntity.ok(payrollService.approvePayroll(id));
@@ -62,9 +62,5 @@ public class PayrollController {
             @PathVariable UUID id,
             @Valid @RequestBody RejectPayrollRequest request) {
         return ResponseEntity.ok(payrollService.rejectPayroll(id, request));
-    }
-
-    private boolean isAdmin(String userRole) {
-        return "ADMIN".equals(userRole);
     }
 }
