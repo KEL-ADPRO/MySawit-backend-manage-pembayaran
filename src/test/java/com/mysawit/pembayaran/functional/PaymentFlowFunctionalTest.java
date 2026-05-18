@@ -1,6 +1,7 @@
 package com.mysawit.pembayaran.functional;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.mysawit.pembayaran.client.PaymentInvoice;
 import com.mysawit.pembayaran.client.XenditClient;
 import com.mysawit.pembayaran.repository.PayrollRepository;
 import com.mysawit.pembayaran.repository.TopUpTransactionRepository;
@@ -72,10 +73,7 @@ class PaymentFlowFunctionalTest {
         when(xenditClient.createInvoice(anyString(), anyDouble(), anyString(), anyString(), anyString()))
                 .thenAnswer(invocation -> {
                     String externalId = invocation.getArgument(0);
-                    return Map.of(
-                            "external_id", externalId,
-                            "invoice_url", "https://checkout.test/invoices/" + externalId
-                    );
+                    return new PaymentInvoice(externalId, "https://checkout.test/invoices/" + externalId);
                 });
     }
 

@@ -7,7 +7,6 @@ import com.mysawit.pembayaran.exception.PayrollNotFoundException;
 import com.mysawit.pembayaran.model.Payroll;
 import com.mysawit.pembayaran.model.WageConfig;
 import com.mysawit.pembayaran.model.enums.PayrollStatus;
-import com.mysawit.pembayaran.model.enums.UserRole;
 import com.mysawit.pembayaran.repository.PayrollRepository;
 import com.mysawit.pembayaran.repository.WageConfigRepository;
 import com.mysawit.pembayaran.service.strategy.WageCalculatorFactory;
@@ -41,7 +40,7 @@ public class PayrollServiceImpl implements PayrollService {
                         .buruhWagePerKg(0).supirTrukWagePerKg(0).mandorWagePerKg(0)
                         .updatedAt(LocalDateTime.now()).build());
 
-        double wagePerKg = resolveWagePerKg(config, request.getUserRole());
+        double wagePerKg = wageCalculatorFactory.getWagePerKg(request.getUserRole(), config);
         double amount = wageCalculatorFactory.calculate(request.getUserRole(), wagePerKg, request.getKilogram());
 
         String description = String.format("Payroll %s: %.1f kg x %.1f/kg = %.1f SawitDollar",
@@ -124,14 +123,6 @@ public class PayrollServiceImpl implements PayrollService {
     private Payroll findOrThrow(UUID id) {
         return payrollRepository.findById(id)
                 .orElseThrow(() -> new PayrollNotFoundException(id));
-    }
-
-    private double resolveWagePerKg(WageConfig config, UserRole role) {
-        return switch (role) {
-            case BURUH -> config.getBuruhWagePerKg();
-            case SUPIR_TRUK -> config.getSupirTrukWagePerKg();
-            case MANDOR -> config.getMandorWagePerKg();
-        };
     }
 
     private PayrollResponse toResponse(Payroll payroll) {

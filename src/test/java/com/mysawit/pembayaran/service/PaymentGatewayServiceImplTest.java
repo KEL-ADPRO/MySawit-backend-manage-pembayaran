@@ -1,5 +1,6 @@
 package com.mysawit.pembayaran.service;
 
+import com.mysawit.pembayaran.client.PaymentInvoice;
 import com.mysawit.pembayaran.client.XenditClient;
 import com.mysawit.pembayaran.dto.request.TopUpRequest;
 import com.mysawit.pembayaran.dto.response.TopUpResponse;
@@ -58,13 +59,8 @@ class PaymentGatewayServiceImplTest {
         return request;
     }
 
-    private Map<String, Object> mockXenditResponse(String externalId) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("id", "xendit-" + externalId);
-        response.put("external_id", externalId);
-        response.put("invoice_url", "https://mock-payment.xendit.co/pay/" + externalId);
-        response.put("status", "PENDING");
-        return response;
+    private PaymentInvoice mockXenditInvoice(String externalId) {
+        return new PaymentInvoice(externalId, "https://mock-payment.xendit.co/pay/" + externalId);
     }
 
     // ─── initiateTopUp ───────────────────────────────────────────────────────
@@ -75,7 +71,7 @@ class PaymentGatewayServiceImplTest {
         TopUpRequest request = buildRequest(userId, 100000.0);
 
         when(xenditClient.createInvoice(anyString(), anyDouble(), anyString(), anyString(), anyString()))
-                .thenAnswer(inv -> mockXenditResponse(inv.getArgument(0)));
+                .thenAnswer(inv -> mockXenditInvoice(inv.getArgument(0)));
         when(topUpTransactionRepository.save(any())).thenAnswer(inv -> {
             TopUpTransaction tx = inv.getArgument(0);
             tx = TopUpTransaction.builder()
@@ -115,7 +111,7 @@ class PaymentGatewayServiceImplTest {
         TopUpRequest request = buildRequest(userId, 50000.0);
 
         when(xenditClient.createInvoice(anyString(), anyDouble(), anyString(), anyString(), anyString()))
-                .thenAnswer(inv -> mockXenditResponse(inv.getArgument(0)));
+                .thenAnswer(inv -> mockXenditInvoice(inv.getArgument(0)));
         when(topUpTransactionRepository.save(any())).thenAnswer(inv -> {
             TopUpTransaction tx = inv.getArgument(0);
             return TopUpTransaction.builder()
@@ -139,7 +135,7 @@ class PaymentGatewayServiceImplTest {
         TopUpRequest request = buildRequest(userId, 100000.0);
 
         when(xenditClient.createInvoice(anyString(), anyDouble(), anyString(), anyString(), anyString()))
-                .thenAnswer(inv -> mockXenditResponse(inv.getArgument(0)));
+                .thenAnswer(inv -> mockXenditInvoice(inv.getArgument(0)));
         when(topUpTransactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         paymentGatewayService.initiateTopUp(request);
