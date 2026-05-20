@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package mysawit.pembayaran.v1;
+
+option java_multiple_files = true;
+option java_package = "com.mysawit.pembayaran.grpc.proto";
+option java_outer_classname = "PayrollEventProto";
+
+service PayrollEventService {
+  rpc CreateFromHarvestApproval(HarvestApprovalPayrollEventRequest) returns (PayrollEventResponse) {}
+  rpc CreateFromDriverDeliveryApproval(DriverDeliveryApprovalPayrollEventRequest) returns (PayrollEventResponse) {}
+  rpc CreateFromFactoryDeliveryApproval(FactoryDeliveryApprovalPayrollEventRequest) returns (PayrollEventResponse) {}
+}
+
+message HarvestApprovalPayrollEventRequest {
+  string source_id = 1;
+  string buruh_user_id = 2;
+  string harvested_kg = 3;
+  string idempotency_key = 4;
+}
+
+message DriverDeliveryApprovalPayrollEventRequest {
+  string source_id = 1;
+  string supir_user_id = 2;
+  string delivered_kg = 3;
+  string idempotency_key = 4;
+}
+
+message FactoryDeliveryApprovalPayrollEventRequest {
+  string source_id = 1;
+  string mandor_user_id = 2;
+  string recognized_kg = 3;
+  string idempotency_key = 4;
+}
+
+message PayrollEventResponse {
+  string id = 1;
+  string user_id = 2;
+  string user_role = 3;
+  string amount = 4;
+  string kilogram = 5;
+  string harvested_kg = 6;
+  string delivered_kg = 7;
+  string recognized_kg = 8;
+  string kilogram_type = 9;
+  string source_type = 10;
+  string source_id = 11;
+  string idempotency_key = 12;
+  string description = 13;
+  string status = 14;
+  string rejection_reason = 15;
+  string created_at = 16;
+  string updated_at = 17;
+}
