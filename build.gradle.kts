@@ -42,7 +42,7 @@ dependencies {
     implementation("net.devh:grpc-server-spring-boot-starter:3.1.0.RELEASE")
     implementation("io.grpc:grpc-protobuf")
     implementation("io.grpc:grpc-stub")
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17")
     compileOnly("org.apache.tomcat:annotations-api:6.0.53")
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
