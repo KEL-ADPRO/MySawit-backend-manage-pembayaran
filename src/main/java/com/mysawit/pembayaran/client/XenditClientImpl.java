@@ -6,6 +6,7 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.math.BigDecimal;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,7 +35,7 @@ public class XenditClientImpl implements XenditClient {
 
     @Override
     public Map<String, Object> createInvoice(String externalId,
-                                             double amountRupiah,
+                                             BigDecimal amountRupiah,
                                              String description,
                                              String successRedirectUrl,
                                              String failureRedirectUrl) {

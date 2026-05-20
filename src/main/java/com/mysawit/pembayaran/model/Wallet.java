@@ -3,6 +3,7 @@ package com.mysawit.pembayaran.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -21,13 +22,16 @@ public class Wallet {
     @Column(nullable = false, unique = true)
     private UUID userId;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 19, scale = 2)
     @Builder.Default
-    private double balance = 0.0;
+    private BigDecimal balance = BigDecimal.ZERO;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    @Version
+    private Long version;
 }

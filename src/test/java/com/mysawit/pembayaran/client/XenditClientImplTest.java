@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,7 +25,7 @@ class XenditClientImplTest {
 
     @Test
     void createInvoice_withoutApiKey_shouldReturnLocalMockPaymentUrl() {
-        Map<String, Object> invoice = xenditClient.createInvoice("ext-ref-123", 100000.0, "TopUp", "", "");
+        Map<String, Object> invoice = xenditClient.createInvoice("ext-ref-123", new BigDecimal("100000"), "TopUp", "", "");
 
         assertThat(invoice.get("external_id")).isEqualTo("ext-ref-123");
         assertThat(invoice.get("invoice_url"))
@@ -35,7 +36,7 @@ class XenditClientImplTest {
     void createInvoice_withPublicBaseUrl_shouldUseConfiguredBaseUrl() {
         ReflectionTestUtils.setField(xenditClient, "publicBaseUrl", "https://api.example.test/");
 
-        Map<String, Object> invoice = xenditClient.createInvoice("ext-ref-456", 100000.0, "TopUp", "", "");
+        Map<String, Object> invoice = xenditClient.createInvoice("ext-ref-456", new BigDecimal("100000"), "TopUp", "", "");
 
         assertThat(invoice.get("invoice_url"))
                 .isEqualTo("https://api.example.test/api/pembayaran/wallet/topup/mock-pay/ext-ref-456");

@@ -3,6 +3,7 @@ package com.mysawit.pembayaran.service.strategy;
 import com.mysawit.pembayaran.model.enums.UserRole;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -17,7 +18,7 @@ public class WageCalculatorFactory {
                 .collect(Collectors.toMap(WageCalculationStrategy::getSupportedRole, s -> s));
     }
 
-    public double calculate(UserRole role, double wagePerKg, double kilogram) {
+    public BigDecimal calculate(UserRole role, BigDecimal wagePerKg, BigDecimal kilogram) {
         WageCalculationStrategy strategy = strategies.get(role);
         if (strategy == null) {
             throw new IllegalArgumentException("No wage strategy found for role: " + role);

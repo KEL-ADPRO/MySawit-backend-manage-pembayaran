@@ -18,7 +18,7 @@ public interface PayrollService {
 
     PayrollResponse getPayrollById(UUID id);
 
-    PayrollResponse approvePayroll(UUID id);
+    PayrollResponse approvePayroll(UUID id, UUID adminUserId);
 
     PayrollResponse rejectPayroll(UUID id, RejectPayrollRequest request);
 }

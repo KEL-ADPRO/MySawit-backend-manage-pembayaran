@@ -1,11 +1,12 @@
 package com.mysawit.pembayaran.client;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 public interface XenditClient {
 
     Map<String, Object> createInvoice(String externalId,
-                                      double amountRupiah,
+                                      BigDecimal amountRupiah,
                                       String description,
                                       String successRedirectUrl,
                                       String failureRedirectUrl);

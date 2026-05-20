@@ -2,6 +2,7 @@ package com.mysawit.pembayaran.controller;
 
 import com.mysawit.pembayaran.dto.request.TopUpRequest;
 import com.mysawit.pembayaran.dto.response.TopUpResponse;
+import com.mysawit.pembayaran.security.AuthenticatedUser;
 import com.mysawit.pembayaran.service.PaymentGatewayService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -10,12 +11,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.HtmlUtils;
 import org.springframework.web.util.UriUtils;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
 import java.util.Map;
 
 @Slf4j
@@ -31,12 +32,9 @@ public class PaymentGatewayController {
 
     @PostMapping
     public ResponseEntity<TopUpResponse> initiateTopUp(
-            @RequestHeader(value = "X-User-Role", required = false) String userRole,
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
             @Valid @RequestBody TopUpRequest request) {
-        if (!isAdmin(userRole)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-        return ResponseEntity.status(HttpStatus.CREATED).body(paymentGatewayService.initiateTopUp(request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(paymentGatewayService.initiateTopUp(currentUser.userId(), request));
     }
 
     @PostMapping("/callback")
@@ -129,7 +127,4 @@ public class PaymentGatewayController {
                 """.formatted(status, status, HtmlUtils.htmlEscape(externalId));
     }
 
-    private boolean isAdmin(String userRole) {
-        return userRole != null && "ADMIN".equals(userRole.trim().toUpperCase(Locale.ROOT));
-    }
 }
