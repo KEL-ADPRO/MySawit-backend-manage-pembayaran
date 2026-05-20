@@ -60,3 +60,6 @@ xendit:
   failure-redirect-url: ${XENDIT_FAILURE_REDIRECT_URL:}
   exchange-rate: ${XENDIT_EXCHANGE_RATE:10000}
   amount-step: ${XENDIT_AMOUNT_STEP:10000}
+
+mysawit:
+  public-base-url: ${MYSAWIT_PUBLIC_BASE_URL:}

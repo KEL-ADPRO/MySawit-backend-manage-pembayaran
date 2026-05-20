@@ -38,3 +38,5 @@ out/
 
 ### Security ###
 application.properties
+.env
+.env.*

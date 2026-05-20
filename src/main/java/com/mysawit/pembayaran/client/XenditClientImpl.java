@@ -15,9 +15,16 @@ import java.util.Map;
 public class XenditClientImpl implements XenditClient {
 
     private static final String XENDIT_INVOICE_URL = "https://api.xendit.co/v2/invoices";
+    private static final String MOCK_PAYMENT_PATH = "/api/pembayaran/wallet/topup/mock-pay/";
 
     @Value("${xendit.api-key:}")
     private String apiKey;
+
+    @Value("${mysawit.public-base-url:}")
+    private String publicBaseUrl;
+
+    @Value("${server.port:8085}")
+    private String serverPort;
 
     private final RestTemplate restTemplate;
 
@@ -36,7 +43,7 @@ public class XenditClientImpl implements XenditClient {
             Map<String, Object> mock = new HashMap<>();
             mock.put("id", externalId);
             mock.put("external_id", externalId);
-            mock.put("invoice_url", "https://mock-payment.xendit.co/pay/" + externalId);
+            mock.put("invoice_url", buildMockPaymentUrl(externalId));
             mock.put("status", "PENDING");
             return mock;
         }
@@ -63,5 +70,13 @@ public class XenditClientImpl implements XenditClient {
                 XENDIT_INVOICE_URL, HttpMethod.POST, entity,
                 new org.springframework.core.ParameterizedTypeReference<>() {});
         return response.getBody();
+    }
+
+    private String buildMockPaymentUrl(String externalId) {
+        String baseUrl = publicBaseUrl;
+        if (baseUrl == null || baseUrl.isBlank()) {
+            baseUrl = "http://localhost:" + serverPort;
+        }
+        return baseUrl.replaceAll("/+$", "") + MOCK_PAYMENT_PATH + externalId;
     }
 }

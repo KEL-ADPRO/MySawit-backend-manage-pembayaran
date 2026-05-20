@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -118,5 +119,37 @@ class PaymentGatewayControllerTest {
                 .andExpect(status().isOk());
 
         verify(paymentGatewayService).handleCallback(any());
+    }
+
+    @Test
+    void showMockPaymentPage_shouldRenderLocalPaymentActions() throws Exception {
+        mockMvc.perform(get("/api/pembayaran/wallet/topup/mock-pay/{externalId}", "ext-ref-123"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("Mock Xendit Payment")))
+                .andExpect(content().string(containsString("/api/pembayaran/wallet/topup/mock-pay/ext-ref-123/paid")))
+                .andExpect(content().string(containsString("/api/pembayaran/wallet/topup/mock-pay/ext-ref-123/failed")));
+    }
+
+    @Test
+    void markMockPaymentPaid_shouldTriggerPaidCallback() throws Exception {
+        mockMvc.perform(post("/api/pembayaran/wallet/topup/mock-pay/{externalId}/paid", "ext-ref-123"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Payment SUCCESS")));
+
+        verify(paymentGatewayService).handleCallback(argThat(payload ->
+                "ext-ref-123".equals(payload.get("external_id"))
+                        && "PAID".equals(payload.get("status"))));
+    }
+
+    @Test
+    void markMockPaymentFailed_shouldTriggerFailedCallback() throws Exception {
+        mockMvc.perform(post("/api/pembayaran/wallet/topup/mock-pay/{externalId}/failed", "ext-ref-123"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Payment FAILED")));
+
+        verify(paymentGatewayService).handleCallback(argThat(payload ->
+                "ext-ref-123".equals(payload.get("external_id"))
+                        && "EXPIRED".equals(payload.get("status"))));
     }
 }
