@@ -40,3 +40,8 @@ out/
 application.properties
 .env
 .env.*
+
+### Profiling ###
+*.jfr
+jmeter.log
+profiling/

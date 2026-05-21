@@ -31,7 +31,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/pembayaran/wallet/topup/callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/pembayaran/wallet/topup/mock-pay/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/pembayaran/wallet/topup/mock-pay/**").permitAll()
-                        .requestMatchers("/actuator/health/**", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/pembayaran/payroll").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/pembayaran/payroll/*/approve").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/pembayaran/payroll/*/reject").hasRole("ADMIN")

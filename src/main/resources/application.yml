@@ -29,18 +29,28 @@ server:
 
 grpc:
   server:
-    port: ${GRPC_PORT:9090}
+    port: ${GRPC_PORT:9093}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
+    prometheus:
+      enabled: true
     health:
       probes:
         enabled: true
       show-details: never
+  metrics:
+    tags:
+      application: mysawit-pembayaran
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
   health:
     defaults:
       enabled: false
