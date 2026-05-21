@@ -1,19 +1,19 @@
 package com.mysawit.pembayaran.service;
 
 import com.mysawit.pembayaran.client.XenditClient;
-import com.mysawit.pembayaran.client.PaymentInvoice;
 import com.mysawit.pembayaran.dto.request.TopUpRequest;
 import com.mysawit.pembayaran.dto.response.TopUpResponse;
 import com.mysawit.pembayaran.model.TopUpTransaction;
 import com.mysawit.pembayaran.model.enums.TopUpStatus;
 import com.mysawit.pembayaran.repository.TopUpTransactionRepository;
-import com.mysawit.pembayaran.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
@@ -25,14 +25,14 @@ import java.util.UUID;
 public class PaymentGatewayServiceImpl implements PaymentGatewayService {
 
     private final TopUpTransactionRepository topUpTransactionRepository;
-    private final WalletRepository walletRepository;
+    private final WalletService walletService;
     private final XenditClient xenditClient;
 
     @Value("${xendit.exchange-rate:10000}")
-    private double exchangeRate;
+    private BigDecimal exchangeRate;
 
     @Value("${xendit.amount-step:10000}")
-    private double amountStep;
+    private BigDecimal amountStep;
 
     @Value("${xendit.success-redirect-url:}")
     private String successRedirectUrl;
@@ -42,26 +42,30 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
 
     @Override
     @Transactional
-    public TopUpResponse initiateTopUp(TopUpRequest request) {
-        if (request.getAmountRupiah() <= 0 || request.getAmountRupiah() % amountStep != 0) {
+    public TopUpResponse initiateTopUp(UUID adminUserId, TopUpRequest request) {
+        BigDecimal amountRupiah = normalizeMoney(request.getAmountRupiah());
+        if (amountRupiah.signum() <= 0 || amountRupiah.remainder(amountStep).compareTo(BigDecimal.ZERO) != 0) {
             throw new IllegalArgumentException(
-                    "amountRupiah must be a positive multiple of " + (long) amountStep
-                            + ", got: " + request.getAmountRupiah());
+                    "amountRupiah must be a positive multiple of " + format(amountStep)
+                            + ", got: " + format(amountRupiah));
         }
 
-        double amountSawitDollar = request.getAmountRupiah() / exchangeRate;
+        BigDecimal amountSawitDollar = normalizeMoney(amountRupiah.divide(exchangeRate, 2, RoundingMode.HALF_UP));
         String externalId = UUID.randomUUID().toString();
-        String description = String.format("TopUp %.0f IDR = %.1f SawitDollar", request.getAmountRupiah(), amountSawitDollar);
+        String description = "TopUp " + format(amountRupiah) + " IDR = " + format(amountSawitDollar) + " SawitDollar";
 
-        PaymentInvoice invoice = xenditClient.createInvoice(
-                externalId, request.getAmountRupiah(), description,
+        Map<String, Object> xenditResponse = xenditClient.createInvoice(
+                externalId, amountRupiah, description,
                 successRedirectUrl, failureRedirectUrl);
 
+        String paymentGatewayRef = (String) xenditResponse.getOrDefault("external_id", externalId);
+        String paymentUrl = (String) xenditResponse.getOrDefault("invoice_url", "");
+
         TopUpTransaction tx = TopUpTransaction.builder()
-                .userId(request.getUserId())
-                .amountRupiah(request.getAmountRupiah())
+                .userId(adminUserId)
+                .amountRupiah(amountRupiah)
                 .amountSawitDollar(amountSawitDollar)
-                .paymentGatewayRef(invoice.externalId())
+                .paymentGatewayRef(paymentGatewayRef)
                 .status(TopUpStatus.PENDING)
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -74,7 +78,7 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
                 .amountRupiah(saved.getAmountRupiah())
                 .amountSawitDollar(saved.getAmountSawitDollar())
                 .paymentGatewayRef(saved.getPaymentGatewayRef())
-                .paymentUrl(invoice.paymentUrl())
+                .paymentUrl(paymentUrl)
                 .status(saved.getStatus())
                 .createdAt(saved.getCreatedAt())
                 .build();
@@ -86,7 +90,7 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
         String externalId = (String) payload.get("external_id");
         String status = (String) payload.get("status");
 
-        Optional<TopUpTransaction> txOpt = topUpTransactionRepository.findByPaymentGatewayRef(externalId);
+        Optional<TopUpTransaction> txOpt = topUpTransactionRepository.findWithLockingByPaymentGatewayRef(externalId);
         if (txOpt.isEmpty()) {
             log.warn("No TopUpTransaction found for external_id: {}", externalId);
             return;
@@ -103,16 +107,22 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
         if ("PAID".equals(status)) {
             tx.setStatus(TopUpStatus.SUCCESS);
             topUpTransactionRepository.save(tx);
-
-            walletRepository.findByUserId(tx.getUserId()).ifPresent(wallet -> {
-                wallet.setBalance(wallet.getBalance() + tx.getAmountSawitDollar());
-                wallet.setUpdatedAt(LocalDateTime.now());
-                walletRepository.save(wallet);
-            });
+            walletService.addBalance(tx.getUserId(), tx.getAmountSawitDollar());
 
         } else if ("EXPIRED".equals(status)) {
             tx.setStatus(TopUpStatus.FAILED);
             topUpTransactionRepository.save(tx);
         }
+    }
+
+    private BigDecimal normalizeMoney(BigDecimal amount) {
+        if (amount == null) {
+            throw new IllegalArgumentException("amountRupiah is required");
+        }
+        return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String format(BigDecimal amount) {
+        return amount.stripTrailingZeros().toPlainString();
     }
 }

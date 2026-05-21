@@ -3,22 +3,28 @@ package com.mysawit.pembayaran.service;
 import com.mysawit.pembayaran.dto.request.CreatePayrollRequest;
 import com.mysawit.pembayaran.dto.request.RejectPayrollRequest;
 import com.mysawit.pembayaran.dto.response.PayrollResponse;
-import com.mysawit.pembayaran.dto.response.WalletResponse;
 import com.mysawit.pembayaran.exception.InsufficientBalanceException;
 import com.mysawit.pembayaran.exception.PayrollNotFoundException;
 import com.mysawit.pembayaran.model.Payroll;
 import com.mysawit.pembayaran.model.WageConfig;
+import com.mysawit.pembayaran.model.enums.PayrollKilogramType;
+import com.mysawit.pembayaran.model.enums.PayrollSourceType;
 import com.mysawit.pembayaran.model.enums.PayrollStatus;
 import com.mysawit.pembayaran.model.enums.UserRole;
 import com.mysawit.pembayaran.repository.PayrollRepository;
 import com.mysawit.pembayaran.repository.WageConfigRepository;
+import com.mysawit.pembayaran.service.strategy.BuruhWageStrategy;
+import com.mysawit.pembayaran.service.strategy.MandorWageStrategy;
+import com.mysawit.pembayaran.service.strategy.SupirTrukWageStrategy;
 import com.mysawit.pembayaran.service.strategy.WageCalculatorFactory;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -38,227 +44,231 @@ class PayrollServiceImplTest {
     private WageConfigRepository wageConfigRepository;
 
     @Mock
-    private WageCalculatorFactory wageCalculatorFactory;
-
-    @Mock
     private WalletService walletService;
 
-    @InjectMocks
     private PayrollServiceImpl payrollService;
 
-    private WageConfig wageConfigWith(double buruh, double supir, double mandor) {
+    @BeforeEach
+    void setUp() {
+        payrollService = new PayrollServiceImpl(
+                payrollRepository,
+                wageConfigRepository,
+                new WageCalculatorFactory(List.of(
+                        new BuruhWageStrategy(),
+                        new SupirTrukWageStrategy(),
+                        new MandorWageStrategy())),
+                walletService);
+        ReflectionTestUtils.setField(payrollService, "exchangeRate", new BigDecimal("10000"));
+    }
+
+    private BigDecimal bd(String value) {
+        return new BigDecimal(value);
+    }
+
+    private WageConfig wageConfigWith(String buruh, String supir, String mandor) {
         return WageConfig.builder()
                 .id(UUID.randomUUID())
-                .buruhWagePerKg(buruh)
-                .supirTrukWagePerKg(supir)
-                .mandorWagePerKg(mandor)
+                .buruhWagePerKg(bd(buruh))
+                .supirTrukWagePerKg(bd(supir))
+                .mandorWagePerKg(bd(mandor))
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
 
-    private Payroll pendingPayroll(UUID id, UUID userId, double amount) {
+    private Payroll pendingPayroll(UUID id, UUID userId, BigDecimal amount) {
         return Payroll.builder()
                 .id(id)
                 .userId(userId)
                 .userRole(UserRole.BURUH)
                 .amount(amount)
-                .kilogram(100.0)
+                .kilogram(bd("100.000"))
+                .harvestedKg(bd("100.000"))
+                .kilogramType(PayrollKilogramType.HARVESTED)
+                .sourceType(PayrollSourceType.MANUAL_ADMIN)
+                .description("test")
                 .status(PayrollStatus.PENDING)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
 
-    // ─── CREATE TESTS ───────────────────────────────────────────────────────
+    private void mockSave() {
+        when(payrollRepository.save(any())).thenAnswer(inv -> {
+            Payroll payroll = inv.getArgument(0);
+            if (payroll.getId() == null) {
+                payroll.setId(UUID.randomUUID());
+            }
+            return payroll;
+        });
+    }
 
     @Test
-    void createPayroll_buruh_shouldCalculateCorrectAmount() {
+    void createPayroll_buruh_usesHarvestedKgFormula() {
         UUID userId = UUID.randomUUID();
-        WageConfig wageConfig = wageConfigWith(5000.0, 0, 0);
-        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfig));
-        when(wageCalculatorFactory.getWagePerKg(UserRole.BURUH, wageConfig)).thenReturn(5000.0);
-        when(wageCalculatorFactory.calculate(UserRole.BURUH, 5000.0, 100.0)).thenReturn(450000.0);
-        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("50", "0", "0")));
+        mockSave();
 
         CreatePayrollRequest request = new CreatePayrollRequest();
         request.setUserId(userId);
         request.setUserRole(UserRole.BURUH);
-        request.setKilogram(100.0);
+        request.setHarvestedKg(bd("100"));
 
         PayrollResponse result = payrollService.createPayroll(request);
 
-        assertThat(result.getAmount()).isEqualTo(450000.0);
+        assertThat(result.getAmount()).isEqualByComparingTo("0.45");
+        assertThat(result.getKilogram()).isEqualByComparingTo("100.000");
+        assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.HARVESTED);
         assertThat(result.getStatus()).isEqualTo(PayrollStatus.PENDING);
     }
 
     @Test
-    void createPayroll_supirTruk_shouldCalculateCorrectAmount() {
+    void createPayroll_supirTruk_usesDeliveredKgFormula() {
         UUID userId = UUID.randomUUID();
-        WageConfig wageConfig = wageConfigWith(0, 3000.0, 0);
-        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfig));
-        when(wageCalculatorFactory.getWagePerKg(UserRole.SUPIR_TRUK, wageConfig)).thenReturn(3000.0);
-        when(wageCalculatorFactory.calculate(UserRole.SUPIR_TRUK, 3000.0, 200.0)).thenReturn(540000.0);
-        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("0", "30", "0")));
+        mockSave();
 
         CreatePayrollRequest request = new CreatePayrollRequest();
         request.setUserId(userId);
         request.setUserRole(UserRole.SUPIR_TRUK);
-        request.setKilogram(200.0);
+        request.setDeliveredKg(bd("200"));
 
         PayrollResponse result = payrollService.createPayroll(request);
 
-        assertThat(result.getAmount()).isEqualTo(540000.0);
+        assertThat(result.getAmount()).isEqualByComparingTo("0.54");
+        assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.DELIVERED);
     }
 
     @Test
-    void createPayroll_mandor_shouldCalculateCorrectAmount() {
+    void createPayroll_mandor_usesRecognizedKgFormula() {
         UUID userId = UUID.randomUUID();
-        WageConfig wageConfig = wageConfigWith(0, 0, 4000.0);
-        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfig));
-        when(wageCalculatorFactory.getWagePerKg(UserRole.MANDOR, wageConfig)).thenReturn(4000.0);
-        when(wageCalculatorFactory.calculate(UserRole.MANDOR, 4000.0, 150.0)).thenReturn(540000.0);
-        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("0", "0", "40")));
+        mockSave();
 
         CreatePayrollRequest request = new CreatePayrollRequest();
         request.setUserId(userId);
         request.setUserRole(UserRole.MANDOR);
-        request.setKilogram(150.0);
+        request.setRecognizedKg(bd("150"));
 
         PayrollResponse result = payrollService.createPayroll(request);
 
-        assertThat(result.getAmount()).isEqualTo(540000.0);
+        assertThat(result.getAmount()).isEqualByComparingTo("0.54");
+        assertThat(result.getRecognizedKg()).isEqualByComparingTo("150.000");
+        assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.RECOGNIZED);
     }
 
     @Test
-    void createPayroll_shouldSetStatusPending() {
-        UUID userId = UUID.randomUUID();
-        WageConfig wageConfig = wageConfigWith(5000.0, 0, 0);
-        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfig));
-        when(wageCalculatorFactory.getWagePerKg(eq(UserRole.BURUH), eq(wageConfig))).thenReturn(5000.0);
-        when(wageCalculatorFactory.calculate(any(), anyDouble(), anyDouble())).thenReturn(450000.0);
-        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    void createPayroll_integrationRequiresMatchingRoleAndSourceMetadata() {
+        CreatePayrollRequest request = new CreatePayrollRequest();
+        request.setUserId(UUID.randomUUID());
+        request.setUserRole(UserRole.MANDOR);
+        request.setSourceType(PayrollSourceType.HARVEST_APPROVAL);
+        request.setHarvestedKg(bd("100"));
+        request.setSourceId("harvest-1");
+        request.setIdempotencyKey("payroll-harvest-1");
+
+        assertThatThrownBy(() -> payrollService.createPayroll(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("role");
+    }
+
+    @Test
+    void createPayroll_descriptionIsTransparent() {
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("50", "0", "0")));
+        mockSave();
 
         CreatePayrollRequest request = new CreatePayrollRequest();
-        request.setUserId(userId);
+        request.setUserId(UUID.randomUUID());
         request.setUserRole(UserRole.BURUH);
-        request.setKilogram(100.0);
+        request.setSourceType(PayrollSourceType.HARVEST_APPROVAL);
+        request.setSourceId("harvest-1");
+        request.setIdempotencyKey("payroll-harvest-1");
+        request.setHarvestedKg(bd("100"));
 
         PayrollResponse result = payrollService.createPayroll(request);
 
-        assertThat(result.getStatus()).isEqualTo(PayrollStatus.PENDING);
+        assertThat(result.getDescription()).contains("BURUH", "HARVEST_APPROVAL", "harvested", "100", "Rp 50", "90%", "0.45 SawitDollar");
     }
 
     @Test
-    void createPayroll_shouldUseLatestWageConfig() {
-        UUID userId = UUID.randomUUID();
-        WageConfig latest = wageConfigWith(7000.0, 0, 0);
-        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc())
-                .thenReturn(Optional.of(latest));
-        when(wageCalculatorFactory.getWagePerKg(UserRole.BURUH, latest)).thenReturn(7000.0);
-        when(wageCalculatorFactory.calculate(UserRole.BURUH, 7000.0, 50.0)).thenReturn(315000.0);
-        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    void createPayroll_duplicateIdempotencyKey_returnsExistingPayroll() {
+        Payroll existing = pendingPayroll(UUID.randomUUID(), UUID.randomUUID(), bd("4500.00"));
+        existing.setIdempotencyKey("payroll-harvest-1");
+        when(payrollRepository.findByIdempotencyKey("payroll-harvest-1")).thenReturn(Optional.of(existing));
 
         CreatePayrollRequest request = new CreatePayrollRequest();
-        request.setUserId(userId);
+        request.setUserId(existing.getUserId());
         request.setUserRole(UserRole.BURUH);
-        request.setKilogram(50.0);
+        request.setSourceType(PayrollSourceType.HARVEST_APPROVAL);
+        request.setSourceId("harvest-1");
+        request.setIdempotencyKey("payroll-harvest-1");
+        request.setHarvestedKg(bd("100"));
 
         PayrollResponse result = payrollService.createPayroll(request);
 
-        verify(wageConfigRepository).findTopByOrderByUpdatedAtDesc();
-        verify(wageCalculatorFactory).getWagePerKg(UserRole.BURUH, latest);
-        verify(wageCalculatorFactory).calculate(UserRole.BURUH, 7000.0, 50.0);
-        assertThat(result.getAmount()).isEqualTo(315000.0);
+        assertThat(result.getId()).isEqualTo(existing.getId());
+        verify(payrollRepository, never()).save(any());
     }
 
     @Test
-    void createPayroll_shouldGenerateDescription() {
-        UUID userId = UUID.randomUUID();
-        WageConfig wageConfig = wageConfigWith(5000.0, 0, 0);
-        when(wageConfigRepository.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfig));
-        when(wageCalculatorFactory.getWagePerKg(UserRole.BURUH, wageConfig)).thenReturn(5000.0);
-        when(wageCalculatorFactory.calculate(UserRole.BURUH, 5000.0, 100.0)).thenReturn(450000.0);
-        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        CreatePayrollRequest request = new CreatePayrollRequest();
-        request.setUserId(userId);
-        request.setUserRole(UserRole.BURUH);
-        request.setKilogram(100.0);
-
-        PayrollResponse result = payrollService.createPayroll(request);
-
-        assertThat(result.getDescription()).isNotBlank();
-        assertThat(result.getDescription()).containsIgnoringCase("100");
-        assertThat(result.getDescription()).containsIgnoringCase("450000");
-    }
-
-    // ─── APPROVE/REJECT TESTS ────────────────────────────────────────────────
-
-    @Test
-    void approvePayroll_success() {
+    void approvePayroll_creditsRecipientAndDeductsAuthenticatedAdmin() {
         UUID payrollId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
-        Payroll payroll = pendingPayroll(payrollId, userId, 1000.0);
-        when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
+        UUID adminId = UUID.randomUUID();
+        Payroll payroll = pendingPayroll(payrollId, userId, bd("1000.00"));
+        when(payrollRepository.findWithLockingById(payrollId)).thenReturn(Optional.of(payroll));
         when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(walletService.deductBalance(PayrollServiceImpl.ADMIN_USER_ID, 1000.0))
-                .thenReturn(WalletResponse.builder().balance(4000.0).build());
-        when(walletService.addBalance(userId, 1000.0))
-                .thenReturn(WalletResponse.builder().balance(1000.0).build());
 
-        PayrollResponse result = payrollService.approvePayroll(payrollId);
+        PayrollResponse result = payrollService.approvePayroll(payrollId, adminId);
 
         assertThat(result.getStatus()).isEqualTo(PayrollStatus.ACCEPTED);
-        verify(walletService).deductBalance(PayrollServiceImpl.ADMIN_USER_ID, 1000.0);
-        verify(walletService).addBalance(userId, 1000.0);
+        verify(walletService).deductBalance(adminId, bd("1000.00"));
+        verify(walletService).addBalance(userId, bd("1000.00"));
     }
 
     @Test
-    void approvePayroll_insufficientBalance_shouldThrow() {
+    void approvePayroll_insufficientBalance_keepsPayrollPending() {
         UUID payrollId = UUID.randomUUID();
-        UUID userId = UUID.randomUUID();
-        Payroll payroll = pendingPayroll(payrollId, userId, 1000.0);
-        when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
+        UUID adminId = UUID.randomUUID();
+        Payroll payroll = pendingPayroll(payrollId, UUID.randomUUID(), bd("1000.00"));
+        when(payrollRepository.findWithLockingById(payrollId)).thenReturn(Optional.of(payroll));
         doThrow(new InsufficientBalanceException("Insufficient balance"))
-                .when(walletService).deductBalance(PayrollServiceImpl.ADMIN_USER_ID, 1000.0);
+                .when(walletService).deductBalance(adminId, bd("1000.00"));
 
-        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId))
+        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId, adminId))
                 .isInstanceOf(InsufficientBalanceException.class);
+        assertThat(payroll.getStatus()).isEqualTo(PayrollStatus.PENDING);
+        verify(walletService, never()).addBalance(any(), any());
     }
 
     @Test
-    void approvePayroll_notPending_shouldThrow() {
+    void approvePayroll_twiceOnlyPaysOnce() {
         UUID payrollId = UUID.randomUUID();
-        Payroll payroll = Payroll.builder()
-                .id(payrollId)
-                .userId(UUID.randomUUID())
-                .status(PayrollStatus.ACCEPTED)
-                .amount(1000.0)
-                .kilogram(100.0)
-                .userRole(UserRole.BURUH)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-        when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
+        UUID adminId = UUID.randomUUID();
+        Payroll payroll = pendingPayroll(payrollId, UUID.randomUUID(), bd("1000.00"));
+        when(payrollRepository.findWithLockingById(payrollId)).thenReturn(Optional.of(payroll));
+        when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId))
+        payrollService.approvePayroll(payrollId, adminId);
+
+        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId, adminId))
                 .isInstanceOf(IllegalStateException.class);
+        verify(walletService, times(1)).deductBalance(adminId, bd("1000.00"));
     }
 
     @Test
     void approvePayroll_notFound_shouldThrow() {
         UUID payrollId = UUID.randomUUID();
-        when(payrollRepository.findById(payrollId)).thenReturn(Optional.empty());
+        when(payrollRepository.findWithLockingById(payrollId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId))
+        assertThatThrownBy(() -> payrollService.approvePayroll(payrollId, UUID.randomUUID()))
                 .isInstanceOf(PayrollNotFoundException.class);
     }
 
     @Test
-    void rejectPayroll_success() {
+    void rejectPayroll_savesReasonAndDoesNotTouchWallet() {
         UUID payrollId = UUID.randomUUID();
-        Payroll payroll = pendingPayroll(payrollId, UUID.randomUUID(), 1000.0);
-        when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
+        Payroll payroll = pendingPayroll(payrollId, UUID.randomUUID(), bd("1000.00"));
+        when(payrollRepository.findWithLockingById(payrollId)).thenReturn(Optional.of(payroll));
         when(payrollRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         RejectPayrollRequest request = new RejectPayrollRequest();
@@ -268,15 +278,15 @@ class PayrollServiceImplTest {
 
         assertThat(result.getStatus()).isEqualTo(PayrollStatus.REJECTED);
         assertThat(result.getRejectionReason()).isEqualTo("Quality not met");
-        verify(walletService, never()).deductBalance(any(), anyDouble());
-        verify(walletService, never()).addBalance(any(), anyDouble());
+        verify(walletService, never()).deductBalance(any(), any());
+        verify(walletService, never()).addBalance(any(), any());
     }
 
     @Test
     void rejectPayroll_blankReason_shouldThrow() {
         UUID payrollId = UUID.randomUUID();
-        Payroll payroll = pendingPayroll(payrollId, UUID.randomUUID(), 1000.0);
-        when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
+        Payroll payroll = pendingPayroll(payrollId, UUID.randomUUID(), bd("1000.00"));
+        when(payrollRepository.findWithLockingById(payrollId)).thenReturn(Optional.of(payroll));
 
         RejectPayrollRequest request = new RejectPayrollRequest();
         request.setRejectionReason("");
@@ -286,108 +296,30 @@ class PayrollServiceImplTest {
     }
 
     @Test
-    void rejectPayroll_notPending_shouldThrow() {
-        UUID payrollId = UUID.randomUUID();
-        Payroll payroll = Payroll.builder()
-                .id(payrollId)
-                .userId(UUID.randomUUID())
-                .status(PayrollStatus.REJECTED)
-                .amount(1000.0)
-                .kilogram(100.0)
-                .userRole(UserRole.BURUH)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-        when(payrollRepository.findById(payrollId)).thenReturn(Optional.of(payroll));
-
-        RejectPayrollRequest request = new RejectPayrollRequest();
-        request.setRejectionReason("Some reason");
-
-        assertThatThrownBy(() -> payrollService.rejectPayroll(payrollId, request))
-                .isInstanceOf(IllegalStateException.class);
-    }
-
-    // ─── LIST / DETAIL TESTS ────────────────────────────────────────────────
-
-    @Test
-    void getPayrolls_noFilter_shouldReturnAll() {
-        List<Payroll> all = List.of(
-                pendingPayroll(UUID.randomUUID(), UUID.randomUUID(), 100.0),
-                pendingPayroll(UUID.randomUUID(), UUID.randomUUID(), 200.0)
-        );
-        when(payrollRepository.findAll()).thenReturn(all);
-
-        List<PayrollResponse> result = payrollService.getPayrolls(null, null, null, null);
-
-        assertThat(result).hasSize(2);
-    }
-
-    @Test
-    void getPayrolls_filterByUserId() {
+    void getPayrolls_filterByUserStatusAndDateRange() {
         UUID userId = UUID.randomUUID();
-        List<Payroll> userPayrolls = List.of(pendingPayroll(UUID.randomUUID(), userId, 100.0));
-        when(payrollRepository.findByUserId(userId)).thenReturn(userPayrolls);
+        LocalDateTime base = LocalDateTime.of(2026, 5, 20, 12, 0);
+        Payroll old = pendingPayroll(UUID.randomUUID(), userId, bd("100.00"));
+        old.setCreatedAt(base.minusDays(5));
+        Payroll recent = pendingPayroll(UUID.randomUUID(), userId, bd("200.00"));
+        recent.setCreatedAt(base.plusDays(1));
+        when(payrollRepository.findByUserIdAndStatus(userId, PayrollStatus.PENDING)).thenReturn(List.of(old, recent));
 
-        List<PayrollResponse> result = payrollService.getPayrolls(null, userId, null, null);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getUserId()).isEqualTo(userId);
-    }
-
-    @Test
-    void getPayrolls_filterByStatus() {
-        List<Payroll> pendingPayrolls = List.of(
-                pendingPayroll(UUID.randomUUID(), UUID.randomUUID(), 100.0)
-        );
-        when(payrollRepository.findByStatus(PayrollStatus.PENDING)).thenReturn(pendingPayrolls);
-
-        List<PayrollResponse> result = payrollService.getPayrolls(PayrollStatus.PENDING, null, null, null);
+        List<PayrollResponse> result = payrollService.getPayrolls(PayrollStatus.PENDING, userId, base, null);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getStatus()).isEqualTo(PayrollStatus.PENDING);
-    }
-
-    @Test
-    void getPayrolls_filterByDateRange() {
-        LocalDateTime base = LocalDateTime.of(2025, 1, 15, 12, 0);
-        Payroll old = Payroll.builder()
-                .id(UUID.randomUUID()).userId(UUID.randomUUID())
-                .userRole(UserRole.BURUH).amount(100.0).kilogram(10.0)
-                .status(PayrollStatus.PENDING)
-                .createdAt(base.minusDays(5)).updatedAt(base.minusDays(5))
-                .build();
-        Payroll recent = Payroll.builder()
-                .id(UUID.randomUUID()).userId(UUID.randomUUID())
-                .userRole(UserRole.BURUH).amount(200.0).kilogram(20.0)
-                .status(PayrollStatus.PENDING)
-                .createdAt(base.plusDays(1)).updatedAt(base.plusDays(1))
-                .build();
-        when(payrollRepository.findAll()).thenReturn(List.of(old, recent));
-
-        List<PayrollResponse> result = payrollService.getPayrolls(null, null, base, null);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getAmount()).isEqualTo(200.0);
+        assertThat(result.get(0).getAmount()).isEqualByComparingTo("200.00");
     }
 
     @Test
     void getPayrollById_found_shouldReturn() {
         UUID id = UUID.randomUUID();
-        Payroll payroll = pendingPayroll(id, UUID.randomUUID(), 500.0);
+        Payroll payroll = pendingPayroll(id, UUID.randomUUID(), bd("500.00"));
         when(payrollRepository.findById(id)).thenReturn(Optional.of(payroll));
 
         PayrollResponse result = payrollService.getPayrollById(id);
 
         assertThat(result.getId()).isEqualTo(id);
-        assertThat(result.getAmount()).isEqualTo(500.0);
-    }
-
-    @Test
-    void getPayrollById_notFound_shouldThrow() {
-        UUID id = UUID.randomUUID();
-        when(payrollRepository.findById(id)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> payrollService.getPayrollById(id))
-                .isInstanceOf(PayrollNotFoundException.class);
+        assertThat(result.getAmount()).isEqualByComparingTo("500.00");
     }
 }

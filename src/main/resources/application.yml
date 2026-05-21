@@ -27,6 +27,10 @@ server:
   port: ${PORT:8085}
   address: 0.0.0.0
 
+grpc:
+  server:
+    port: ${GRPC_PORT:9090}
+
 management:
   endpoints:
     web:
@@ -60,3 +64,8 @@ xendit:
   failure-redirect-url: ${XENDIT_FAILURE_REDIRECT_URL:}
   exchange-rate: ${XENDIT_EXCHANGE_RATE:10000}
   amount-step: ${XENDIT_AMOUNT_STEP:10000}
+
+mysawit:
+  public-base-url: ${MYSAWIT_PUBLIC_BASE_URL:}
+  grpc:
+    internal-token: ${MYSAWIT_GRPC_INTERNAL_TOKEN:}

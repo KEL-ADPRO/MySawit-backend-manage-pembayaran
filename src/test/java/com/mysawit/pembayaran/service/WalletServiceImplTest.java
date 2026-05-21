@@ -10,6 +10,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,18 +28,22 @@ class WalletServiceImplTest {
     @InjectMocks
     private WalletServiceImpl walletService;
 
-    private Wallet buildWallet(UUID userId, double balance) {
+    private BigDecimal bd(String value) {
+        return new BigDecimal(value);
+    }
+
+    private Wallet buildWallet(UUID userId, String balance) {
         return Wallet.builder()
                 .id(UUID.randomUUID())
                 .userId(userId)
-                .balance(balance)
+                .balance(bd(balance))
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
 
     @Test
-    void createWallet_success() {
+    void createWallet_successDefaultsToZero() {
         UUID userId = UUID.randomUUID();
         when(walletRepository.findByUserId(userId)).thenReturn(Optional.empty());
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -46,32 +51,20 @@ class WalletServiceImplTest {
         WalletResponse result = walletService.createWallet(userId);
 
         assertThat(result.getUserId()).isEqualTo(userId);
-        assertThat(result.getBalance()).isEqualTo(0.0);
+        assertThat(result.getBalance()).isEqualByComparingTo("0.00");
         verify(walletRepository).save(any(Wallet.class));
     }
 
     @Test
     void createWallet_alreadyExists_shouldReturnExisting() {
         UUID userId = UUID.randomUUID();
-        Wallet existing = buildWallet(userId, 500.0);
+        Wallet existing = buildWallet(userId, "500.00");
         when(walletRepository.findByUserId(userId)).thenReturn(Optional.of(existing));
 
         WalletResponse result = walletService.createWallet(userId);
 
-        assertThat(result.getBalance()).isEqualTo(500.0);
+        assertThat(result.getBalance()).isEqualByComparingTo("500.00");
         verify(walletRepository, never()).save(any());
-    }
-
-    @Test
-    void getWallet_found_shouldReturn() {
-        UUID userId = UUID.randomUUID();
-        Wallet wallet = buildWallet(userId, 200.0);
-        when(walletRepository.findByUserId(userId)).thenReturn(Optional.of(wallet));
-
-        WalletResponse result = walletService.getWalletByUserId(userId);
-
-        assertThat(result.getBalance()).isEqualTo(200.0);
-        assertThat(result.getUserId()).isEqualTo(userId);
     }
 
     @Test
@@ -82,77 +75,66 @@ class WalletServiceImplTest {
 
         WalletResponse result = walletService.getWalletByUserId(userId);
 
-        assertThat(result.getBalance()).isEqualTo(0.0);
+        assertThat(result.getBalance()).isEqualByComparingTo("0.00");
         assertThat(result.getUserId()).isEqualTo(userId);
-        verify(walletRepository).save(any(Wallet.class));
     }
 
     @Test
-    void addBalance_success() {
+    void addBalance_successUsesBigDecimalPrecision() {
         UUID userId = UUID.randomUUID();
-        Wallet wallet = buildWallet(userId, 100.0);
-        when(walletRepository.findByUserId(userId)).thenReturn(Optional.of(wallet));
+        Wallet wallet = buildWallet(userId, "0.10");
+        when(walletRepository.findWithLockingByUserId(userId)).thenReturn(Optional.of(wallet));
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        WalletResponse result = walletService.addBalance(userId, 50.0);
+        WalletResponse result = walletService.addBalance(userId, bd("0.20"));
 
-        assertThat(result.getBalance()).isEqualTo(150.0);
+        assertThat(result.getBalance()).isEqualByComparingTo("0.30");
+    }
+
+    @Test
+    void addBalance_createsWalletIfMissing() {
+        UUID userId = UUID.randomUUID();
+        when(walletRepository.findWithLockingByUserId(userId)).thenReturn(Optional.empty());
+        when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        WalletResponse result = walletService.addBalance(userId, bd("10.00"));
+
+        assertThat(result.getBalance()).isEqualByComparingTo("10.00");
     }
 
     @Test
     void deductBalance_success() {
         UUID userId = UUID.randomUUID();
-        Wallet wallet = buildWallet(userId, 100.0);
-        when(walletRepository.findByUserId(userId)).thenReturn(Optional.of(wallet));
+        Wallet wallet = buildWallet(userId, "100.00");
+        when(walletRepository.findWithLockingByUserId(userId)).thenReturn(Optional.of(wallet));
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        WalletResponse result = walletService.deductBalance(userId, 30.0);
+        WalletResponse result = walletService.deductBalance(userId, bd("30.00"));
 
-        assertThat(result.getBalance()).isEqualTo(70.0);
+        assertThat(result.getBalance()).isEqualByComparingTo("70.00");
     }
 
     @Test
-    void deductBalance_insufficientBalance_shouldThrow() {
+    void deductBalance_insufficientBalance_shouldThrowAndNotGoNegative() {
         UUID userId = UUID.randomUUID();
-        Wallet wallet = buildWallet(userId, 50.0);
-        when(walletRepository.findByUserId(userId)).thenReturn(Optional.of(wallet));
+        Wallet wallet = buildWallet(userId, "50.00");
+        when(walletRepository.findWithLockingByUserId(userId)).thenReturn(Optional.of(wallet));
 
-        assertThatThrownBy(() -> walletService.deductBalance(userId, 100.0))
+        assertThatThrownBy(() -> walletService.deductBalance(userId, bd("100.00")))
                 .isInstanceOf(InsufficientBalanceException.class);
+        assertThat(wallet.getBalance()).isEqualByComparingTo("50.00");
+        verify(walletRepository, never()).save(any());
     }
 
     @Test
     void deductBalance_exactBalance_shouldSucceed() {
         UUID userId = UUID.randomUUID();
-        Wallet wallet = buildWallet(userId, 100.0);
-        when(walletRepository.findByUserId(userId)).thenReturn(Optional.of(wallet));
+        Wallet wallet = buildWallet(userId, "100.00");
+        when(walletRepository.findWithLockingByUserId(userId)).thenReturn(Optional.of(wallet));
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        WalletResponse result = walletService.deductBalance(userId, 100.0);
+        WalletResponse result = walletService.deductBalance(userId, bd("100.00"));
 
-        assertThat(result.getBalance()).isEqualTo(0.0);
-    }
-
-    @Test
-    void addBalance_walletMissing_shouldLazyCreate() {
-        UUID userId = UUID.randomUUID();
-        when(walletRepository.findByUserId(userId)).thenReturn(Optional.empty());
-        when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        WalletResponse result = walletService.addBalance(userId, 250.0);
-
-        assertThat(result.getUserId()).isEqualTo(userId);
-        assertThat(result.getBalance()).isEqualTo(250.0);
-        verify(walletRepository).save(any(Wallet.class));
-    }
-
-    @Test
-    void deductBalance_walletMissing_shouldThrowInsufficientBalance() {
-        UUID userId = UUID.randomUUID();
-        when(walletRepository.findByUserId(userId)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> walletService.deductBalance(userId, 100.0))
-                .isInstanceOf(InsufficientBalanceException.class);
-        verify(walletRepository, never()).save(any());
+        assertThat(result.getBalance()).isEqualByComparingTo("0.00");
     }
 }

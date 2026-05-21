@@ -3,15 +3,17 @@ package com.mysawit.pembayaran.dto.request;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
 
+import java.math.BigDecimal;
+
 @Data
 public class UpdateWageConfigRequest {
 
     @PositiveOrZero
-    private double buruhWagePerKg;
+    private BigDecimal buruhWagePerKg;
 
     @PositiveOrZero
-    private double supirTrukWagePerKg;
+    private BigDecimal supirTrukWagePerKg;
 
     @PositiveOrZero
-    private double mandorWagePerKg;
+    private BigDecimal mandorWagePerKg;
 }

@@ -10,5 +10,5 @@ import java.util.UUID;
 @Repository
 public interface WageConfigRepository extends JpaRepository<WageConfig, UUID> {
 
-    Optional<WageConfig> findTopByOrderByUpdatedAtDesc();
+    Optional<WageConfig> findFirstByOrderByUpdatedAtDesc();
 }

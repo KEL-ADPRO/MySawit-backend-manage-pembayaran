@@ -3,6 +3,7 @@ package com.mysawit.pembayaran.dto.response;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -11,8 +12,8 @@ import java.util.UUID;
 public class WageConfigResponse {
 
     private UUID id;
-    private double buruhWagePerKg;
-    private double supirTrukWagePerKg;
-    private double mandorWagePerKg;
+    private BigDecimal buruhWagePerKg;
+    private BigDecimal supirTrukWagePerKg;
+    private BigDecimal mandorWagePerKg;
     private LocalDateTime updatedAt;
 }
