@@ -15,6 +15,7 @@ import com.mysawit.pembayaran.repository.WageConfigRepository;
 import com.mysawit.pembayaran.service.strategy.WageCalculatorFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,9 @@ public class PayrollServiceImpl implements PayrollService {
     private final WageCalculatorFactory wageCalculatorFactory;
     private final WalletService walletService;
 
+    @Value("${xendit.exchange-rate:10000}")
+    private BigDecimal exchangeRate;
+
     @Override
     @Transactional
     public PayrollResponse createPayroll(CreatePayrollRequest request) {
@@ -62,20 +66,21 @@ public class PayrollServiceImpl implements PayrollService {
 
     private PayrollResponse createNewPayroll(CreatePayrollRequest request, PayrollSourceType sourceType) {
         PayrollKilogramContext kilogramContext = resolveKilogramContext(request, sourceType);
-        WageConfig config = wageConfigRepository.findFirstBy()
+        WageConfig config = wageConfigRepository.findFirstByOrderByUpdatedAtDesc()
                 .orElse(WageConfig.builder()
                         .buruhWagePerKg(normalizeMoney(BigDecimal.ZERO))
                         .supirTrukWagePerKg(normalizeMoney(BigDecimal.ZERO))
                         .mandorWagePerKg(normalizeMoney(BigDecimal.ZERO))
                         .updatedAt(LocalDateTime.now()).build());
 
-        BigDecimal wagePerKg = resolveWagePerKg(config, request.getUserRole());
+        BigDecimal wagePerKgRupiah = resolveWagePerKg(config, request.getUserRole());
+        BigDecimal wagePerKgSawitDollar = wagePerKgRupiah.divide(exchangeRate, 6, RoundingMode.HALF_UP);
         BigDecimal amount = normalizeMoney(wageCalculatorFactory.calculate(
-                request.getUserRole(), wagePerKg, kilogramContext.kilogram()));
+                request.getUserRole(), wagePerKgSawitDollar, kilogramContext.kilogram()));
 
         String description = buildDescription(
                 request.getUserRole(), sourceType, kilogramContext.kilogramType(),
-                kilogramContext.kilogram(), wagePerKg, amount);
+                kilogramContext.kilogram(), wagePerKgRupiah, amount);
 
         Payroll payroll = Payroll.builder()
                 .userId(request.getUserId())
@@ -259,12 +264,12 @@ public class PayrollServiceImpl implements PayrollService {
     }
 
     private String buildDescription(UserRole role, PayrollSourceType sourceType, PayrollKilogramType kilogramType,
-                                    BigDecimal kilogram, BigDecimal wagePerKg, BigDecimal amount) {
+                                    BigDecimal kilogram, BigDecimal wagePerKgRupiah, BigDecimal amountSawitDollar) {
         return "Payroll " + role
                 + " dari " + sourceType
                 + ": " + format(kilogram) + " kg " + kilogramType.name().toLowerCase()
-                + " x " + format(wagePerKg) + " SawitDollar/kg"
-                + " x 90% = " + format(amount) + " SawitDollar";
+                + " x Rp " + format(wagePerKgRupiah) + "/kg"
+                + " x 90% = " + format(amountSawitDollar) + " SawitDollar";
     }
 
     private String format(BigDecimal value) {

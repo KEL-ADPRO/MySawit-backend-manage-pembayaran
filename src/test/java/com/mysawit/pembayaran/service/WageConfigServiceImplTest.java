@@ -41,7 +41,7 @@ class WageConfigServiceImplTest {
                 .mandorWagePerKg(bd("2000"))
                 .updatedAt(LocalDateTime.now())
                 .build();
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(config));
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(config));
 
         WageConfigResponse result = wageConfigService.getWageConfig();
 
@@ -52,7 +52,7 @@ class WageConfigServiceImplTest {
 
     @Test
     void getConfig_notExists_shouldAutoCreateDefault() {
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.empty());
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.empty());
         when(wageConfigRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         WageConfigResponse result = wageConfigService.getWageConfig();
@@ -72,7 +72,7 @@ class WageConfigServiceImplTest {
                 .mandorWagePerKg(bd("2000"))
                 .updatedAt(LocalDateTime.now())
                 .build();
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(existing));
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(existing));
         when(wageConfigRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         UpdateWageConfigRequest request = new UpdateWageConfigRequest();

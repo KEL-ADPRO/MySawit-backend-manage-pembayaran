@@ -20,7 +20,7 @@ public class WageConfigServiceImpl implements WageConfigService {
 
     @Override
     public WageConfigResponse getWageConfig() {
-        WageConfig config = wageConfigRepository.findFirstBy()
+        WageConfig config = wageConfigRepository.findFirstByOrderByUpdatedAtDesc()
                 .orElseGet(() -> {
                     WageConfig defaultConfig = WageConfig.builder()
                             .buruhWagePerKg(normalizeMoney(BigDecimal.ZERO))
@@ -39,7 +39,7 @@ public class WageConfigServiceImpl implements WageConfigService {
         BigDecimal supirWage = normalizeNonNegativeWage(request.getSupirTrukWagePerKg(), "supirTrukWagePerKg");
         BigDecimal mandorWage = normalizeNonNegativeWage(request.getMandorWagePerKg(), "mandorWagePerKg");
 
-        WageConfig config = wageConfigRepository.findFirstBy()
+        WageConfig config = wageConfigRepository.findFirstByOrderByUpdatedAtDesc()
                 .orElseGet(() -> WageConfig.builder()
                         .buruhWagePerKg(normalizeMoney(BigDecimal.ZERO))
                         .supirTrukWagePerKg(normalizeMoney(BigDecimal.ZERO))

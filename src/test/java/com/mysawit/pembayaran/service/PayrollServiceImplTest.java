@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -57,6 +58,7 @@ class PayrollServiceImplTest {
                         new SupirTrukWageStrategy(),
                         new MandorWageStrategy())),
                 walletService);
+        ReflectionTestUtils.setField(payrollService, "exchangeRate", new BigDecimal("10000"));
     }
 
     private BigDecimal bd(String value) {
@@ -103,7 +105,7 @@ class PayrollServiceImplTest {
     @Test
     void createPayroll_buruh_usesHarvestedKgFormula() {
         UUID userId = UUID.randomUUID();
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(wageConfigWith("50", "0", "0")));
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("50", "0", "0")));
         mockSave();
 
         CreatePayrollRequest request = new CreatePayrollRequest();
@@ -113,7 +115,7 @@ class PayrollServiceImplTest {
 
         PayrollResponse result = payrollService.createPayroll(request);
 
-        assertThat(result.getAmount()).isEqualByComparingTo("4500.00");
+        assertThat(result.getAmount()).isEqualByComparingTo("0.45");
         assertThat(result.getKilogram()).isEqualByComparingTo("100.000");
         assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.HARVESTED);
         assertThat(result.getStatus()).isEqualTo(PayrollStatus.PENDING);
@@ -122,7 +124,7 @@ class PayrollServiceImplTest {
     @Test
     void createPayroll_supirTruk_usesDeliveredKgFormula() {
         UUID userId = UUID.randomUUID();
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(wageConfigWith("0", "30", "0")));
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("0", "30", "0")));
         mockSave();
 
         CreatePayrollRequest request = new CreatePayrollRequest();
@@ -132,14 +134,14 @@ class PayrollServiceImplTest {
 
         PayrollResponse result = payrollService.createPayroll(request);
 
-        assertThat(result.getAmount()).isEqualByComparingTo("5400.00");
+        assertThat(result.getAmount()).isEqualByComparingTo("0.54");
         assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.DELIVERED);
     }
 
     @Test
     void createPayroll_mandor_usesRecognizedKgFormula() {
         UUID userId = UUID.randomUUID();
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(wageConfigWith("0", "0", "40")));
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("0", "0", "40")));
         mockSave();
 
         CreatePayrollRequest request = new CreatePayrollRequest();
@@ -149,7 +151,7 @@ class PayrollServiceImplTest {
 
         PayrollResponse result = payrollService.createPayroll(request);
 
-        assertThat(result.getAmount()).isEqualByComparingTo("5400.00");
+        assertThat(result.getAmount()).isEqualByComparingTo("0.54");
         assertThat(result.getRecognizedKg()).isEqualByComparingTo("150.000");
         assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.RECOGNIZED);
     }
@@ -171,7 +173,7 @@ class PayrollServiceImplTest {
 
     @Test
     void createPayroll_descriptionIsTransparent() {
-        when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(wageConfigWith("50", "0", "0")));
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("50", "0", "0")));
         mockSave();
 
         CreatePayrollRequest request = new CreatePayrollRequest();
@@ -184,7 +186,7 @@ class PayrollServiceImplTest {
 
         PayrollResponse result = payrollService.createPayroll(request);
 
-        assertThat(result.getDescription()).contains("BURUH", "HARVEST_APPROVAL", "harvested", "100", "50", "90%", "4500");
+        assertThat(result.getDescription()).contains("BURUH", "HARVEST_APPROVAL", "harvested", "100", "Rp 50", "90%", "0.45 SawitDollar");
     }
 
     @Test

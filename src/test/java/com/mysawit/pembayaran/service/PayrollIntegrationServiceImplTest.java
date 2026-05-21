@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -61,9 +62,10 @@ class PayrollIntegrationServiceImplTest {
                         new SupirTrukWageStrategy(),
                         new MandorWageStrategy())),
                 walletService);
+        ReflectionTestUtils.setField(payrollService, "exchangeRate", new BigDecimal("10000"));
         integrationService = new PayrollIntegrationServiceImpl(payrollService);
 
-        lenient().when(wageConfigRepository.findFirstBy()).thenReturn(Optional.of(WageConfig.builder()
+        lenient().when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(WageConfig.builder()
                 .id(UUID.randomUUID())
                 .buruhWagePerKg(bd("50"))
                 .supirTrukWagePerKg(bd("30"))
@@ -88,7 +90,7 @@ class PayrollIntegrationServiceImplTest {
         assertThat(result.getUserRole()).isEqualTo(UserRole.BURUH);
         assertThat(result.getSourceType()).isEqualTo(PayrollSourceType.HARVEST_APPROVAL);
         assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.HARVESTED);
-        assertThat(result.getAmount()).isEqualByComparingTo("4500.00");
+        assertThat(result.getAmount()).isEqualByComparingTo("0.45");
         assertThat(result.getStatus()).isEqualTo(PayrollStatus.PENDING);
     }
 
@@ -107,7 +109,7 @@ class PayrollIntegrationServiceImplTest {
         assertThat(result.getUserRole()).isEqualTo(UserRole.SUPIR_TRUK);
         assertThat(result.getSourceType()).isEqualTo(PayrollSourceType.DRIVER_DELIVERY_APPROVAL);
         assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.DELIVERED);
-        assertThat(result.getAmount()).isEqualByComparingTo("5400.00");
+        assertThat(result.getAmount()).isEqualByComparingTo("0.54");
     }
 
     @Test
@@ -126,7 +128,7 @@ class PayrollIntegrationServiceImplTest {
         assertThat(result.getSourceType()).isEqualTo(PayrollSourceType.FACTORY_DELIVERY_APPROVAL);
         assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.RECOGNIZED);
         assertThat(result.getRecognizedKg()).isEqualByComparingTo("80.000");
-        assertThat(result.getAmount()).isEqualByComparingTo("2880.00");
+        assertThat(result.getAmount()).isEqualByComparingTo("0.29");
     }
 
     @Test
