@@ -17,10 +17,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -138,34 +138,64 @@ class PaymentGatewayControllerTest {
     }
 
     @Test
-    void showMockPaymentPage_shouldRenderLocalPaymentActions() throws Exception {
-        mockMvc.perform(get("/api/pembayaran/wallet/topup/mock-pay/{externalId}", "ext-ref-123"))
+    void getTopUps_authenticated_shouldReturnUserTopUps() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(paymentGatewayService.getTopUps(userId)).thenReturn(List.of(buildTopUpResponse(userId)));
+
+        mockMvc.perform(get("/api/pembayaran/wallet/topup")
+                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
-                .andExpect(content().string(containsString("Mock Xendit Payment")))
-                .andExpect(content().string(containsString("/api/pembayaran/wallet/topup/mock-pay/ext-ref-123/paid")))
-                .andExpect(content().string(containsString("/api/pembayaran/wallet/topup/mock-pay/ext-ref-123/failed")));
+                .andExpect(jsonPath("$[0].userId").value(userId.toString()))
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+
+        verify(paymentGatewayService).getTopUps(userId);
     }
 
     @Test
-    void markMockPaymentPaid_shouldTriggerPaidCallback() throws Exception {
-        mockMvc.perform(post("/api/pembayaran/wallet/topup/mock-pay/{externalId}/paid", "ext-ref-123"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Payment SUCCESS")));
+    void getTopUp_authenticated_shouldReturnUserTopUp() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID topUpId = UUID.randomUUID();
+        TopUpResponse response = buildTopUpResponse(userId);
+        response.setId(topUpId);
+        when(paymentGatewayService.getTopUp(userId, topUpId)).thenReturn(response);
 
-        verify(paymentGatewayService).handleCallback(argThat(payload ->
-                "ext-ref-123".equals(payload.get("external_id"))
-                        && "PAID".equals(payload.get("status"))));
+        mockMvc.perform(get("/api/pembayaran/wallet/topup/{id}", topUpId)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(topUpId.toString()))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+
+        verify(paymentGatewayService).getTopUp(userId, topUpId);
     }
 
     @Test
-    void markMockPaymentFailed_shouldTriggerFailedCallback() throws Exception {
-        mockMvc.perform(post("/api/pembayaran/wallet/topup/mock-pay/{externalId}/failed", "ext-ref-123"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Payment FAILED")));
+    void syncTopUp_admin_shouldReturnSyncedTopUp() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID topUpId = UUID.randomUUID();
+        TopUpResponse response = buildTopUpResponse(userId);
+        response.setId(topUpId);
+        response.setStatus(TopUpStatus.SUCCESS);
+        when(paymentGatewayService.syncTopUp(userId, topUpId)).thenReturn(response);
 
-        verify(paymentGatewayService).handleCallback(argThat(payload ->
-                "ext-ref-123".equals(payload.get("external_id"))
-                        && "EXPIRED".equals(payload.get("status"))));
+        mockMvc.perform(post("/api/pembayaran/wallet/topup/{id}/sync", topUpId)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(topUpId.toString()))
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+        verify(paymentGatewayService).syncTopUp(userId, topUpId);
+    }
+
+    @Test
+    void syncTopUp_nonAdmin_shouldReturn403() throws Exception {
+        mockMvc.perform(post("/api/pembayaran/wallet/topup/{id}/sync", UUID.randomUUID())
+                        .header("X-User-Id", UUID.randomUUID().toString())
+                        .header("X-User-Role", "BURUH"))
+                .andExpect(status().isForbidden());
+
+        verify(paymentGatewayService, never()).syncTopUp(any(), any());
     }
 }

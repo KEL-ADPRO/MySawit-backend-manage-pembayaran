@@ -17,6 +17,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -66,6 +67,18 @@ class PaymentGatewayServiceImplTest {
         response.put("invoice_url", "https://mock-payment.xendit.co/pay/" + externalId);
         response.put("status", "PENDING");
         return response;
+    }
+
+    private TopUpTransaction buildTransaction(UUID userId, String externalId, TopUpStatus status) {
+        return TopUpTransaction.builder()
+                .id(UUID.randomUUID())
+                .userId(userId)
+                .amountRupiah(bd("100000"))
+                .amountSawitDollar(bd("10"))
+                .paymentGatewayRef(externalId)
+                .status(status)
+                .createdAt(LocalDateTime.now().minusMinutes(2))
+                .build();
     }
 
     @Test
@@ -187,5 +200,91 @@ class PaymentGatewayServiceImplTest {
 
         verify(topUpTransactionRepository, never()).save(any());
         verify(walletService, never()).addBalance(any(), any());
+    }
+
+    @Test
+    void getTopUps_shouldReturnUserTransactionsNewestFirst() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction tx = buildTransaction(userId, "ext-ref-1", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of(tx));
+
+        List<TopUpResponse> result = paymentGatewayService.getTopUps(userId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getPaymentGatewayRef()).isEqualTo("ext-ref-1");
+        verify(topUpTransactionRepository).findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    @Test
+    void getTopUp_forOwner_shouldReturnTransaction() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction tx = buildTransaction(userId, "ext-ref-1", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findById(tx.getId())).thenReturn(Optional.of(tx));
+
+        TopUpResponse result = paymentGatewayService.getTopUp(userId, tx.getId());
+
+        assertThat(result.getId()).isEqualTo(tx.getId());
+        assertThat(result.getUserId()).isEqualTo(userId);
+    }
+
+    @Test
+    void getTopUp_forDifferentUser_shouldThrowNotFound() {
+        TopUpTransaction tx = buildTransaction(UUID.randomUUID(), "ext-ref-1", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findById(tx.getId())).thenReturn(Optional.of(tx));
+
+        assertThatThrownBy(() -> paymentGatewayService.getTopUp(UUID.randomUUID(), tx.getId()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not found");
+    }
+
+    @Test
+    void syncTopUp_paidInvoice_shouldCreditBalanceAndReturnSuccess() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction tx = buildTransaction(userId, "ext-ref-paid", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findWithLockingById(tx.getId())).thenReturn(Optional.of(tx));
+        when(xenditClient.getInvoiceByExternalId("ext-ref-paid"))
+                .thenReturn(Map.of("external_id", "ext-ref-paid", "status", "PAID"));
+        when(topUpTransactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        TopUpResponse result = paymentGatewayService.syncTopUp(userId, tx.getId());
+
+        assertThat(result.getStatus()).isEqualTo(TopUpStatus.SUCCESS);
+        verify(topUpTransactionRepository).save(argThat(saved -> saved.getStatus() == TopUpStatus.SUCCESS));
+        verify(walletService).addBalance(userId, bd("10"));
+    }
+
+    @Test
+    void syncTopUp_pendingInvoice_shouldLeaveTransactionPending() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction tx = buildTransaction(userId, "ext-ref-pending", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findWithLockingById(tx.getId())).thenReturn(Optional.of(tx));
+        when(xenditClient.getInvoiceByExternalId("ext-ref-pending"))
+                .thenReturn(Map.of("external_id", "ext-ref-pending", "status", "PENDING"));
+
+        TopUpResponse result = paymentGatewayService.syncTopUp(userId, tx.getId());
+
+        assertThat(result.getStatus()).isEqualTo(TopUpStatus.PENDING);
+        verify(topUpTransactionRepository, never()).save(any());
+        verify(walletService, never()).addBalance(any(), any());
+    }
+
+    @Test
+    void reconcilePendingTopUps_shouldPollOldPendingTransactions() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction paid = buildTransaction(userId, "ext-ref-paid", TopUpStatus.PENDING);
+        TopUpTransaction pending = buildTransaction(userId, "ext-ref-pending", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findByStatusAndCreatedAtBefore(eq(TopUpStatus.PENDING), any(LocalDateTime.class)))
+                .thenReturn(List.of(paid, pending));
+        when(topUpTransactionRepository.findWithLockingById(paid.getId())).thenReturn(Optional.of(paid));
+        when(topUpTransactionRepository.findWithLockingById(pending.getId())).thenReturn(Optional.of(pending));
+        when(xenditClient.getInvoiceByExternalId("ext-ref-paid")).thenReturn(Map.of("status", "PAID"));
+        when(xenditClient.getInvoiceByExternalId("ext-ref-pending")).thenReturn(Map.of("status", "PENDING"));
+        when(topUpTransactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        int synced = paymentGatewayService.reconcilePendingTopUps();
+
+        assertThat(synced).isEqualTo(1);
+        verify(walletService).addBalance(userId, bd("10"));
+        verify(topUpTransactionRepository).save(argThat(saved -> saved.getStatus() == TopUpStatus.SUCCESS));
     }
 }

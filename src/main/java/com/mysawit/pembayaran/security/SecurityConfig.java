@@ -37,6 +37,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/pembayaran/payroll/*/reject").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/pembayaran/wage-config").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/pembayaran/wallet/topup").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/pembayaran/wallet/topup/*/sync").hasRole("ADMIN")
                         .requestMatchers("/internal/payroll-events/**").hasRole("ADMIN")
                         .requestMatchers("/api/pembayaran/payroll/**").authenticated()
                         .requestMatchers("/api/pembayaran/wallet/**").authenticated()

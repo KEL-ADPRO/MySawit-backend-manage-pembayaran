@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -85,6 +86,53 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<TopUpResponse> getTopUps(UUID userId) {
+        return topUpTransactionRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TopUpResponse getTopUp(UUID userId, UUID topUpId) {
+        TopUpTransaction tx = topUpTransactionRepository.findById(topUpId)
+                .orElseThrow(() -> new IllegalArgumentException("Top-up transaction not found"));
+        validateOwner(userId, tx);
+        return toResponse(tx);
+    }
+
+    @Override
+    @Transactional
+    public TopUpResponse syncTopUp(UUID userId, UUID topUpId) {
+        TopUpTransaction tx = topUpTransactionRepository.findWithLockingById(topUpId)
+                .orElseThrow(() -> new IllegalArgumentException("Top-up transaction not found"));
+        validateOwner(userId, tx);
+        reconcile(tx);
+        return toResponse(tx);
+    }
+
+    @Override
+    @Transactional
+    public int reconcilePendingTopUps() {
+        LocalDateTime cutoff = LocalDateTime.now().minusSeconds(30);
+        List<TopUpTransaction> pending = topUpTransactionRepository
+                .findByStatusAndCreatedAtBefore(TopUpStatus.PENDING, cutoff);
+        int synced = 0;
+        for (TopUpTransaction tx : pending) {
+            try {
+                Optional<TopUpTransaction> lockedTx = topUpTransactionRepository.findWithLockingById(tx.getId());
+                if (lockedTx.isPresent() && reconcile(lockedTx.get())) {
+                    synced++;
+                }
+            } catch (RuntimeException ex) {
+                log.warn("Failed to reconcile top-up transaction {}", tx.getId(), ex);
+            }
+        }
+        return synced;
+    }
+
+    @Override
     @Transactional
     public void handleCallback(Map<String, Object> payload) {
         String externalId = (String) payload.get("external_id");
@@ -99,20 +147,64 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
         TopUpTransaction tx = txOpt.get();
 
         if (tx.getStatus() != TopUpStatus.PENDING) {
-            log.info("Ignoring duplicate callback for external_id={} — already in terminal state {}",
+            log.info("Ignoring duplicate callback for external_id={} - already in terminal state {}",
                     externalId, tx.getStatus());
             return;
         }
 
         if ("PAID".equals(status)) {
-            tx.setStatus(TopUpStatus.SUCCESS);
-            topUpTransactionRepository.save(tx);
-            walletService.addBalance(tx.getUserId(), tx.getAmountSawitDollar());
+            markPaid(tx);
 
         } else if ("EXPIRED".equals(status)) {
-            tx.setStatus(TopUpStatus.FAILED);
-            topUpTransactionRepository.save(tx);
+            markFailed(tx);
         }
+    }
+
+    private boolean reconcile(TopUpTransaction tx) {
+        if (tx.getStatus() != TopUpStatus.PENDING) {
+            return false;
+        }
+
+        Map<String, Object> invoice = xenditClient.getInvoiceByExternalId(tx.getPaymentGatewayRef());
+        String status = (String) invoice.get("status");
+        if ("PAID".equals(status)) {
+            markPaid(tx);
+            return true;
+        }
+        if ("EXPIRED".equals(status)) {
+            markFailed(tx);
+            return true;
+        }
+        return false;
+    }
+
+    private void markPaid(TopUpTransaction tx) {
+        tx.setStatus(TopUpStatus.SUCCESS);
+        topUpTransactionRepository.save(tx);
+        walletService.addBalance(tx.getUserId(), tx.getAmountSawitDollar());
+    }
+
+    private void markFailed(TopUpTransaction tx) {
+        tx.setStatus(TopUpStatus.FAILED);
+        topUpTransactionRepository.save(tx);
+    }
+
+    private void validateOwner(UUID userId, TopUpTransaction tx) {
+        if (!tx.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Top-up transaction not found");
+        }
+    }
+
+    private TopUpResponse toResponse(TopUpTransaction tx) {
+        return TopUpResponse.builder()
+                .id(tx.getId())
+                .userId(tx.getUserId())
+                .amountRupiah(tx.getAmountRupiah())
+                .amountSawitDollar(tx.getAmountSawitDollar())
+                .paymentGatewayRef(tx.getPaymentGatewayRef())
+                .status(tx.getStatus())
+                .createdAt(tx.getCreatedAt())
+                .build();
     }
 
     private BigDecimal normalizeMoney(BigDecimal amount) {
