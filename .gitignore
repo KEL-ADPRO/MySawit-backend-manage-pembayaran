@@ -43,4 +43,5 @@ application.properties
 
 ### Profiling ###
 *.jfr
+jmeter.log
 profiling/
