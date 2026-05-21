@@ -78,6 +78,10 @@ public class XenditClientImpl implements XenditClient {
         if (baseUrl == null || baseUrl.isBlank()) {
             baseUrl = "http://localhost:" + serverPort;
         }
-        return baseUrl.replaceAll("/+$", "") + MOCK_PAYMENT_PATH + externalId;
+        int end = baseUrl.length();
+        while (end > 0 && baseUrl.charAt(end - 1) == '/') {
+            end--;
+        }
+        return baseUrl.substring(0, end) + MOCK_PAYMENT_PATH + externalId;
     }
 }
