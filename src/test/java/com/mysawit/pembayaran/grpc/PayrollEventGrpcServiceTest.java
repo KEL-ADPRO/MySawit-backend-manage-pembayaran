@@ -10,7 +10,6 @@ import com.mysawit.pembayaran.model.enums.PayrollStatus;
 import com.mysawit.pembayaran.model.enums.UserRole;
 import com.mysawit.pembayaran.service.PayrollIntegrationService;
 import io.grpc.Status;
-import io.grpc.stub.StreamObserver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -72,7 +71,7 @@ class PayrollEventGrpcServiceTest {
                 .setHarvestedKg("100.500")
                 .setIdempotencyKey("harvest-1:buruh")
                 .build();
-        CapturingObserver<PayrollEventResponse> observer = new CapturingObserver<>();
+        CapturingStreamObserver<PayrollEventResponse> observer = new CapturingStreamObserver<>();
 
         service.createFromHarvestApproval(request, observer);
 
@@ -102,7 +101,7 @@ class PayrollEventGrpcServiceTest {
                 .setHarvestedKg("100.500")
                 .setIdempotencyKey("harvest-1:buruh")
                 .build();
-        CapturingObserver<PayrollEventResponse> observer = new CapturingObserver<>();
+        CapturingStreamObserver<PayrollEventResponse> observer = new CapturingStreamObserver<>();
 
         service.createFromHarvestApproval(request, observer);
 
@@ -112,24 +111,4 @@ class PayrollEventGrpcServiceTest {
         assertThat(observer.completed).isFalse();
     }
 
-    private static final class CapturingObserver<T> implements StreamObserver<T> {
-        private T value;
-        private Throwable error;
-        private boolean completed;
-
-        @Override
-        public void onNext(T value) {
-            this.value = value;
-        }
-
-        @Override
-        public void onError(Throwable throwable) {
-            this.error = throwable;
-        }
-
-        @Override
-        public void onCompleted() {
-            this.completed = true;
-        }
-    }
 }
