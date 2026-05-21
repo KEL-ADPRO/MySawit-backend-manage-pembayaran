@@ -45,10 +45,15 @@ jobs:
 
       - name: Resolve Elastic Beanstalk S3 bucket
         id: ebbucket
+        env:
+          EB_S3_BUCKET: ${{ secrets.EB_S3_BUCKET }}
         run: |
           set -euo pipefail
-          EB_BUCKET="$(aws elasticbeanstalk create-storage-location --query 'S3Bucket' --output text)"
-          echo "bucket=${EB_BUCKET}" >> "$GITHUB_OUTPUT"
+          if [ -z "${EB_S3_BUCKET}" ]; then
+            echo "EB_S3_BUCKET secret is required" >&2
+            exit 1
+          fi
+          echo "bucket=${EB_S3_BUCKET}" >> "$GITHUB_OUTPUT"
 
       - name: Upload deployment package to S3
         run: |
