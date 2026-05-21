@@ -4,11 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -40,7 +42,7 @@ public class XenditClientImpl implements XenditClient {
                                              String successRedirectUrl,
                                              String failureRedirectUrl) {
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("XENDIT_API_KEY not set — returning mock invoice for {}", externalId);
+            log.warn("XENDIT_API_KEY not set - returning mock invoice for {}", externalId);
             Map<String, Object> mock = new HashMap<>();
             mock.put("id", externalId);
             mock.put("external_id", externalId);
@@ -71,6 +73,34 @@ public class XenditClientImpl implements XenditClient {
                 XENDIT_INVOICE_URL, HttpMethod.POST, entity,
                 new org.springframework.core.ParameterizedTypeReference<>() {});
         return response.getBody();
+    }
+
+    @Override
+    public Map<String, Object> getInvoiceByExternalId(String externalId) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("XENDIT_API_KEY not set - cannot reconcile invoice {}", externalId);
+            return Map.of();
+        }
+
+        String basicAuth = "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes());
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", basicAuth);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        String url = UriComponentsBuilder.fromUriString(XENDIT_INVOICE_URL)
+                .queryParam("external_id", externalId)
+                .build()
+                .toUriString();
+
+        ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                url, HttpMethod.GET, entity,
+                new org.springframework.core.ParameterizedTypeReference<>() {});
+
+        List<Map<String, Object>> invoices = response.getBody();
+        if (invoices == null || invoices.isEmpty()) {
+            return Map.of();
+        }
+        return invoices.get(0);
     }
 
     private String buildMockPaymentUrl(String externalId) {

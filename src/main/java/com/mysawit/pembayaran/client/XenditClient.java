@@ -10,4 +10,6 @@ public interface XenditClient {
                                       String description,
                                       String successRedirectUrl,
                                       String failureRedirectUrl);
+
+    Map<String, Object> getInvoiceByExternalId(String externalId);
 }
