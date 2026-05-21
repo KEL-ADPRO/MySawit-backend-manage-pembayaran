@@ -1,0 +1,80 @@
+name: Deploy Staging to AWS Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build application
+        run: ./gradlew clean build
+
+      - name: Prepare deployment package
+        run: |
+          set -euo pipefail
+          cp build/libs/*-SNAPSHOT.jar app.jar
+          printf 'web: java -jar app.jar\n' > Procfile
+          rm -f deploy.zip
+          zip -j deploy.zip app.jar Procfile
+          unzip -l deploy.zip
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Resolve Elastic Beanstalk S3 bucket
+        id: ebbucket
+        run: |
+          set -euo pipefail
+          EB_BUCKET="$(aws elasticbeanstalk create-storage-location --query 'S3Bucket' --output text)"
+          echo "bucket=${EB_BUCKET}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload deployment package to S3
+        run: |
+          set -euo pipefail
+          aws s3 cp deploy.zip \
+            "s3://${{ steps.ebbucket.outputs.bucket }}/${{ secrets.EB_APPLICATION_NAME }}/staging-${{ github.sha }}.zip"
+
+      - name: Create Elastic Beanstalk application version
+        run: |
+          set -euo pipefail
+          aws elasticbeanstalk create-application-version \
+            --application-name "${{ secrets.EB_APPLICATION_NAME }}" \
+            --version-label "staging-${{ github.sha }}" \
+            --description "Auto deploy from staging @ ${{ github.sha }}" \
+            --source-bundle "S3Bucket=${{ steps.ebbucket.outputs.bucket }},S3Key=${{ secrets.EB_APPLICATION_NAME }}/staging-${{ github.sha }}.zip" \
+            --no-auto-create-application
+
+      - name: Update Elastic Beanstalk environment
+        run: |
+          set -euo pipefail
+          aws elasticbeanstalk update-environment \
+            --environment-name "${{ secrets.EB_ENVIRONMENT_NAME }}" \
+            --version-label "staging-${{ github.sha }}"
+
+      - name: Wait for environment update to complete
+        run: |
+          set -euo pipefail
+          aws elasticbeanstalk wait environment-updated \
+            --environment-names "${{ secrets.EB_ENVIRONMENT_NAME }}"
