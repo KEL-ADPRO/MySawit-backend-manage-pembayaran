@@ -86,9 +86,14 @@ tasks.register<Test>("unitTest") {
 tasks.register<Test>("functionalTest") {
     description = "Runs the functional tests."
     group = "verification"
+    shouldRunAfter(tasks.test)
     filter {
         includeTestsMatching("*FunctionalTest")
     }
+}
+
+tasks.named("check") {
+    dependsOn(tasks.named("functionalTest"))
 }
 
 tasks.test {
