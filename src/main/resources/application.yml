@@ -35,12 +35,22 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
+    prometheus:
+      enabled: true
     health:
       probes:
         enabled: true
       show-details: never
+  metrics:
+    tags:
+      application: mysawit-pembayaran
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
   health:
     defaults:
       enabled: false

@@ -40,3 +40,7 @@ out/
 application.properties
 .env
 .env.*
+
+### Profiling ###
+*.jfr
+profiling/

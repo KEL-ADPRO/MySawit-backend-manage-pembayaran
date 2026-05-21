@@ -1,0 +1,52 @@
+groups:
+  - name: mysawit-pembayaran
+    rules:
+      - alert: MysawitPembayaranDown
+        expr: up{job="mysawit-pembayaran"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: MySawit pembayaran service is down
+          description: Prometheus cannot scrape the pembayaran service for more than 1 minute.
+
+      - alert: MysawitPembayaranHighErrorRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{job="mysawit-pembayaran", status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(http_server_requests_seconds_count{job="mysawit-pembayaran"}[5m])), 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: MySawit pembayaran HTTP 5xx rate is high
+          description: More than 5% of HTTP requests have returned 5xx for 5 minutes.
+
+      - alert: MysawitPembayaranHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{job="mysawit-pembayaran"}[5m]))
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: MySawit pembayaran p95 latency is high
+          description: HTTP p95 latency has been above 1 second for 5 minutes.
+
+      - alert: MysawitPembayaranHighHeapUsage
+        expr: |
+          (
+            sum(jvm_memory_used_bytes{job="mysawit-pembayaran", area="heap"})
+            /
+            sum(jvm_memory_max_bytes{job="mysawit-pembayaran", area="heap"})
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: MySawit pembayaran JVM heap usage is high
+          description: JVM heap usage has been above 85% for 10 minutes.
