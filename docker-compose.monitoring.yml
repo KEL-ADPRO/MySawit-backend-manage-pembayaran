@@ -21,14 +21,14 @@ services:
     container_name: mysawit-pembayaran-app
     environment:
       PORT: 8085
-      GRPC_PORT: 9090
+      GRPC_PORT: 9093
       JDBC_DATABASE_URL: jdbc:postgresql://postgres:5432/mysawit_pembayaran
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
       JPA_DDL_AUTO: update
     ports:
       - "${APP_HOST_PORT:-8085}:8085"
-      - "${GRPC_HOST_PORT:-9090}:9090"
+      - "${GRPC_HOST_PORT:-9093}:9093"
     depends_on:
       postgres:
         condition: service_healthy
