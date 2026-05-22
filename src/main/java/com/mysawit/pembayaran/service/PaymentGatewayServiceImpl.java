@@ -87,8 +87,12 @@ public class PaymentGatewayServiceImpl implements PaymentGatewayService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<TopUpResponse> getTopUps(UUID userId) {
+    public List<TopUpResponse> getTopUps(UUID userId, TopUpStatus status,
+                                         LocalDateTime startDate, LocalDateTime endDate) {
         return topUpTransactionRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .filter(tx -> status == null || tx.getStatus() == status)
+                .filter(tx -> startDate == null || !tx.getCreatedAt().isBefore(startDate))
+                .filter(tx -> endDate == null || !tx.getCreatedAt().isAfter(endDate))
                 .map(this::toResponse)
                 .toList();
     }
