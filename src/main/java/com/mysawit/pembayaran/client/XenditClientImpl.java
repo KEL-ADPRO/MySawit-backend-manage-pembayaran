@@ -4,10 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.client.RestTemplate;
 
+import java.math.BigDecimal;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -15,9 +18,16 @@ import java.util.Map;
 public class XenditClientImpl implements XenditClient {
 
     private static final String XENDIT_INVOICE_URL = "https://api.xendit.co/v2/invoices";
+    private static final String MOCK_PAYMENT_PATH = "/api/pembayaran/wallet/topup/mock-pay/";
 
     @Value("${xendit.api-key:}")
     private String apiKey;
+
+    @Value("${mysawit.public-base-url:}")
+    private String publicBaseUrl;
+
+    @Value("${server.port:8085}")
+    private String serverPort;
 
     private final RestTemplate restTemplate;
 
@@ -26,13 +36,17 @@ public class XenditClientImpl implements XenditClient {
     }
 
     @Override
-    public Map<String, Object> createInvoice(String externalId, double amountRupiah, String description) {
+    public Map<String, Object> createInvoice(String externalId,
+                                             BigDecimal amountRupiah,
+                                             String description,
+                                             String successRedirectUrl,
+                                             String failureRedirectUrl) {
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("XENDIT_API_KEY not set — returning mock invoice for {}", externalId);
+            log.warn("XENDIT_API_KEY not set - returning mock invoice for {}", externalId);
             Map<String, Object> mock = new HashMap<>();
             mock.put("id", externalId);
             mock.put("external_id", externalId);
-            mock.put("invoice_url", "https://mock-payment.xendit.co/pay/" + externalId);
+            mock.put("invoice_url", buildMockPaymentUrl(externalId));
             mock.put("status", "PENDING");
             return mock;
         }
@@ -43,6 +57,12 @@ public class XenditClientImpl implements XenditClient {
         body.put("external_id", externalId);
         body.put("amount", amountRupiah);
         body.put("description", description);
+        if (successRedirectUrl != null && !successRedirectUrl.isBlank()) {
+            body.put("success_redirect_url", successRedirectUrl);
+        }
+        if (failureRedirectUrl != null && !failureRedirectUrl.isBlank()) {
+            body.put("failure_redirect_url", failureRedirectUrl);
+        }
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", basicAuth);
@@ -53,5 +73,45 @@ public class XenditClientImpl implements XenditClient {
                 XENDIT_INVOICE_URL, HttpMethod.POST, entity,
                 new org.springframework.core.ParameterizedTypeReference<>() {});
         return response.getBody();
+    }
+
+    @Override
+    public Map<String, Object> getInvoiceByExternalId(String externalId) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("XENDIT_API_KEY not set - cannot reconcile invoice {}", externalId);
+            return Map.of();
+        }
+
+        String basicAuth = "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes());
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", basicAuth);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        String url = UriComponentsBuilder.fromUriString(XENDIT_INVOICE_URL)
+                .queryParam("external_id", externalId)
+                .build()
+                .toUriString();
+
+        ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                url, HttpMethod.GET, entity,
+                new org.springframework.core.ParameterizedTypeReference<>() {});
+
+        List<Map<String, Object>> invoices = response.getBody();
+        if (invoices == null || invoices.isEmpty()) {
+            return Map.of();
+        }
+        return invoices.get(0);
+    }
+
+    private String buildMockPaymentUrl(String externalId) {
+        String baseUrl = publicBaseUrl;
+        if (baseUrl == null || baseUrl.isBlank()) {
+            baseUrl = "http://localhost:" + serverPort;
+        }
+        int end = baseUrl.length();
+        while (end > 0 && baseUrl.charAt(end - 1) == '/') {
+            end--;
+        }
+        return baseUrl.substring(0, end) + MOCK_PAYMENT_PATH + externalId;
     }
 }

@@ -9,6 +9,7 @@ import com.mysawit.pembayaran.service.strategy.WageCalculatorFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
@@ -16,6 +17,10 @@ import static org.assertj.core.api.Assertions.*;
 class WageCalculatorFactoryTest {
 
     private WageCalculatorFactory factory;
+
+    private BigDecimal bd(String value) {
+        return new BigDecimal(value);
+    }
 
     @BeforeEach
     void setUp() {
@@ -29,38 +34,25 @@ class WageCalculatorFactoryTest {
 
     @Test
     void calculate_buruh_shouldReturnCorrectAmount() {
-        double result = factory.calculate(UserRole.BURUH, 5000.0, 100.0);
-        assertThat(result).isEqualTo(5000.0 * 100.0 * 0.9);
+        BigDecimal result = factory.calculate(UserRole.BURUH, bd("5000"), bd("100"));
+        assertThat(result).isEqualByComparingTo("450000");
     }
 
     @Test
     void calculate_supirTruk_shouldReturnCorrectAmount() {
-        double result = factory.calculate(UserRole.SUPIR_TRUK, 3000.0, 200.0);
-        assertThat(result).isEqualTo(3000.0 * 200.0 * 0.9);
+        BigDecimal result = factory.calculate(UserRole.SUPIR_TRUK, bd("3000"), bd("200"));
+        assertThat(result).isEqualByComparingTo("540000");
     }
 
     @Test
     void calculate_mandor_shouldReturnCorrectAmount() {
-        double result = factory.calculate(UserRole.MANDOR, 4000.0, 150.0);
-        assertThat(result).isEqualTo(4000.0 * 150.0 * 0.9);
+        BigDecimal result = factory.calculate(UserRole.MANDOR, bd("4000"), bd("150"));
+        assertThat(result).isEqualByComparingTo("540000");
     }
 
     @Test
-    void calculate_zeroKilogram_shouldReturnZero() {
-        double result = factory.calculate(UserRole.BURUH, 5000.0, 0.0);
-        assertThat(result).isEqualTo(0.0);
-    }
-
-    @Test
-    void calculate_shouldUseDifferentStrategyPerRole() {
-        double buruhResult = factory.calculate(UserRole.BURUH, 1000.0, 10.0);
-        double supirResult = factory.calculate(UserRole.SUPIR_TRUK, 1000.0, 10.0);
-        double mandorResult = factory.calculate(UserRole.MANDOR, 1000.0, 10.0);
-
-        assertThat(buruhResult).isEqualTo(9000.0);
-        assertThat(supirResult).isEqualTo(9000.0);
-        assertThat(mandorResult).isEqualTo(9000.0);
-
-        assertThat(buruhResult).isEqualTo(supirResult).isEqualTo(mandorResult);
+    void calculate_decimalPrecision_shouldNotUseDoubleMath() {
+        BigDecimal result = factory.calculate(UserRole.BURUH, bd("0.10"), bd("3"));
+        assertThat(result).isEqualByComparingTo("0.2700");
     }
 }

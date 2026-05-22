@@ -2,6 +2,7 @@ package com.mysawit.pembayaran.service;
 
 import com.mysawit.pembayaran.dto.response.WalletResponse;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public interface WalletService {
@@ -10,7 +11,7 @@ public interface WalletService {
 
     WalletResponse createWallet(UUID userId);
 
-    WalletResponse addBalance(UUID userId, double amount);
+    WalletResponse addBalance(UUID userId, BigDecimal amount);
 
-    WalletResponse deductBalance(UUID userId, double amount);
+    WalletResponse deductBalance(UUID userId, BigDecimal amount);
 }

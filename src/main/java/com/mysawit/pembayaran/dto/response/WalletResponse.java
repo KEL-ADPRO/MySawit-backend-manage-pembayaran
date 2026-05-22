@@ -3,6 +3,7 @@ package com.mysawit.pembayaran.dto.response;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -12,7 +13,7 @@ public class WalletResponse {
 
     private UUID id;
     private UUID userId;
-    private double balance;
+    private BigDecimal balance;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

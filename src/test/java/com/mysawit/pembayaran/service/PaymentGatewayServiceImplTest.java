@@ -4,26 +4,26 @@ import com.mysawit.pembayaran.client.XenditClient;
 import com.mysawit.pembayaran.dto.request.TopUpRequest;
 import com.mysawit.pembayaran.dto.response.TopUpResponse;
 import com.mysawit.pembayaran.model.TopUpTransaction;
-import com.mysawit.pembayaran.model.Wallet;
 import com.mysawit.pembayaran.model.enums.TopUpStatus;
 import com.mysawit.pembayaran.repository.TopUpTransactionRepository;
-import com.mysawit.pembayaran.repository.WalletRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,7 +33,7 @@ class PaymentGatewayServiceImplTest {
     private TopUpTransactionRepository topUpTransactionRepository;
 
     @Mock
-    private WalletRepository walletRepository;
+    private WalletService walletService;
 
     @Mock
     private XenditClient xenditClient;
@@ -41,10 +41,22 @@ class PaymentGatewayServiceImplTest {
     @InjectMocks
     private PaymentGatewayServiceImpl paymentGatewayService;
 
-    private TopUpRequest buildRequest(UUID userId, double amountRupiah) {
+    private BigDecimal bd(String value) {
+        return new BigDecimal(value);
+    }
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(paymentGatewayService, "exchangeRate", bd("10000"));
+        ReflectionTestUtils.setField(paymentGatewayService, "amountStep", bd("10000"));
+        ReflectionTestUtils.setField(paymentGatewayService, "successRedirectUrl", "");
+        ReflectionTestUtils.setField(paymentGatewayService, "failureRedirectUrl", "");
+    }
+
+    private TopUpRequest buildRequest(UUID suppliedUserId, String amountRupiah) {
         TopUpRequest request = new TopUpRequest();
-        request.setUserId(userId);
-        request.setAmountRupiah(amountRupiah);
+        request.setUserId(suppliedUserId);
+        request.setAmountRupiah(bd(amountRupiah));
         return request;
     }
 
@@ -57,136 +69,222 @@ class PaymentGatewayServiceImplTest {
         return response;
     }
 
-    // ─── initiateTopUp ───────────────────────────────────────────────────────
+    private TopUpTransaction buildTransaction(UUID userId, String externalId, TopUpStatus status) {
+        return TopUpTransaction.builder()
+                .id(UUID.randomUUID())
+                .userId(userId)
+                .amountRupiah(bd("100000"))
+                .amountSawitDollar(bd("10"))
+                .paymentGatewayRef(externalId)
+                .status(status)
+                .createdAt(LocalDateTime.now().minusMinutes(2))
+                .build();
+    }
 
     @Test
-    void initiateTopUp_validAmount_shouldCreatePendingTransaction() {
-        UUID userId = UUID.randomUUID();
-        TopUpRequest request = buildRequest(userId, 100000.0);
+    void initiateTopUp_validAmount_shouldCreatePendingTransactionForAuthenticatedAdmin() {
+        UUID adminId = UUID.randomUUID();
+        UUID suppliedUserId = UUID.randomUUID();
+        TopUpRequest request = buildRequest(suppliedUserId, "100000");
 
-        when(xenditClient.createInvoice(anyString(), anyDouble(), anyString()))
+        when(xenditClient.createInvoice(anyString(), any(BigDecimal.class), anyString(), anyString(), anyString()))
                 .thenAnswer(inv -> mockXenditResponse(inv.getArgument(0)));
         when(topUpTransactionRepository.save(any())).thenAnswer(inv -> {
             TopUpTransaction tx = inv.getArgument(0);
-            tx = TopUpTransaction.builder()
-                    .id(UUID.randomUUID())
-                    .userId(tx.getUserId())
-                    .amountRupiah(tx.getAmountRupiah())
-                    .amountSawitDollar(tx.getAmountSawitDollar())
-                    .paymentGatewayRef(tx.getPaymentGatewayRef())
-                    .status(tx.getStatus())
-                    .createdAt(tx.getCreatedAt())
-                    .build();
+            tx.setId(UUID.randomUUID());
             return tx;
         });
 
-        TopUpResponse result = paymentGatewayService.initiateTopUp(request);
+        TopUpResponse result = paymentGatewayService.initiateTopUp(adminId, request);
 
         assertThat(result.getStatus()).isEqualTo(TopUpStatus.PENDING);
-        assertThat(result.getAmountRupiah()).isEqualTo(100000.0);
-        assertThat(result.getAmountSawitDollar()).isEqualTo(10.0);
+        assertThat(result.getUserId()).isEqualTo(adminId);
+        assertThat(result.getAmountRupiah()).isEqualByComparingTo("100000.00");
+        assertThat(result.getAmountSawitDollar()).isEqualByComparingTo("10.00");
         assertThat(result.getPaymentUrl()).isNotBlank();
-        verify(xenditClient).createInvoice(anyString(), eq(100000.0), anyString());
+        verify(topUpTransactionRepository).save(argThat(tx -> tx.getUserId().equals(adminId)));
+        verify(xenditClient).createInvoice(anyString(), eq(bd("100000.00")), anyString(), anyString(), anyString());
     }
 
     @Test
     void initiateTopUp_amountNotMultipleOf10000_shouldThrow() {
-        UUID userId = UUID.randomUUID();
-        TopUpRequest request = buildRequest(userId, 15000.0);
+        TopUpRequest request = buildRequest(UUID.randomUUID(), "15000");
 
-        assertThatThrownBy(() -> paymentGatewayService.initiateTopUp(request))
+        assertThatThrownBy(() -> paymentGatewayService.initiateTopUp(UUID.randomUUID(), request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("10000");
     }
 
     @Test
-    void initiateTopUp_correctExchangeRate_shouldConvert() {
-        UUID userId = UUID.randomUUID();
-        TopUpRequest request = buildRequest(userId, 50000.0);
+    void initiateTopUp_redirectUrlsConfigured_shouldPassToClient() {
+        ReflectionTestUtils.setField(paymentGatewayService, "successRedirectUrl", "https://app/success");
+        ReflectionTestUtils.setField(paymentGatewayService, "failureRedirectUrl", "https://app/fail");
 
-        when(xenditClient.createInvoice(anyString(), anyDouble(), anyString()))
+        TopUpRequest request = buildRequest(UUID.randomUUID(), "100000");
+
+        when(xenditClient.createInvoice(anyString(), any(BigDecimal.class), anyString(), anyString(), anyString()))
                 .thenAnswer(inv -> mockXenditResponse(inv.getArgument(0)));
-        when(topUpTransactionRepository.save(any())).thenAnswer(inv -> {
-            TopUpTransaction tx = inv.getArgument(0);
-            return TopUpTransaction.builder()
-                    .id(UUID.randomUUID()).userId(tx.getUserId())
-                    .amountRupiah(tx.getAmountRupiah()).amountSawitDollar(tx.getAmountSawitDollar())
-                    .paymentGatewayRef(tx.getPaymentGatewayRef()).status(tx.getStatus())
-                    .createdAt(tx.getCreatedAt()).build();
-        });
+        when(topUpTransactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        TopUpResponse result = paymentGatewayService.initiateTopUp(request);
+        paymentGatewayService.initiateTopUp(UUID.randomUUID(), request);
 
-        assertThat(result.getAmountSawitDollar()).isEqualTo(5.0);
+        verify(xenditClient).createInvoice(
+                anyString(), eq(bd("100000.00")), anyString(),
+                eq("https://app/success"), eq("https://app/fail"));
     }
-
-    // ─── handleCallback ──────────────────────────────────────────────────────
 
     @Test
     void handleCallback_paid_shouldAddBalanceAndSetSuccess() {
-        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
         String externalId = UUID.randomUUID().toString();
 
         TopUpTransaction tx = TopUpTransaction.builder()
-                .id(UUID.randomUUID()).userId(userId)
-                .amountRupiah(100000.0).amountSawitDollar(10.0)
+                .id(UUID.randomUUID()).userId(adminId)
+                .amountRupiah(bd("100000")).amountSawitDollar(bd("10"))
                 .paymentGatewayRef(externalId).status(TopUpStatus.PENDING)
                 .createdAt(LocalDateTime.now()).build();
 
-        Wallet wallet = Wallet.builder()
-                .id(UUID.randomUUID()).userId(userId).balance(50.0)
-                .createdAt(LocalDateTime.now()).updatedAt(LocalDateTime.now()).build();
-
-        when(topUpTransactionRepository.findByPaymentGatewayRef(externalId)).thenReturn(Optional.of(tx));
-        when(walletRepository.findByUserId(userId)).thenReturn(Optional.of(wallet));
+        when(topUpTransactionRepository.findWithLockingByPaymentGatewayRef(externalId)).thenReturn(Optional.of(tx));
         when(topUpTransactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("external_id", externalId);
-        payload.put("status", "PAID");
+        paymentGatewayService.handleCallback(Map.of("external_id", externalId, "status", "PAID"));
 
-        paymentGatewayService.handleCallback(payload);
-
-        verify(walletRepository).save(argThat(w -> w.getBalance() == 60.0));
         verify(topUpTransactionRepository).save(argThat(t -> t.getStatus() == TopUpStatus.SUCCESS));
+        verify(walletService).addBalance(adminId, bd("10"));
     }
 
     @Test
     void handleCallback_expired_shouldSetFailed() {
-        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
         String externalId = UUID.randomUUID().toString();
 
         TopUpTransaction tx = TopUpTransaction.builder()
-                .id(UUID.randomUUID()).userId(userId)
-                .amountRupiah(100000.0).amountSawitDollar(10.0)
+                .id(UUID.randomUUID()).userId(adminId)
+                .amountRupiah(bd("100000")).amountSawitDollar(bd("10"))
                 .paymentGatewayRef(externalId).status(TopUpStatus.PENDING)
                 .createdAt(LocalDateTime.now()).build();
 
-        when(topUpTransactionRepository.findByPaymentGatewayRef(externalId)).thenReturn(Optional.of(tx));
+        when(topUpTransactionRepository.findWithLockingByPaymentGatewayRef(externalId)).thenReturn(Optional.of(tx));
         when(topUpTransactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("external_id", externalId);
-        payload.put("status", "EXPIRED");
-
-        paymentGatewayService.handleCallback(payload);
+        paymentGatewayService.handleCallback(Map.of("external_id", externalId, "status", "EXPIRED"));
 
         verify(topUpTransactionRepository).save(argThat(t -> t.getStatus() == TopUpStatus.FAILED));
-        verify(walletRepository, never()).findByUserId(any());
+        verify(walletService, never()).addBalance(any(), any());
     }
 
     @Test
     void handleCallback_unknownRef_shouldDoNothing() {
-        when(topUpTransactionRepository.findByPaymentGatewayRef(anyString())).thenReturn(Optional.empty());
+        when(topUpTransactionRepository.findWithLockingByPaymentGatewayRef(anyString())).thenReturn(Optional.empty());
 
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("external_id", "nonexistent");
-        payload.put("status", "PAID");
-
-        paymentGatewayService.handleCallback(payload);
+        paymentGatewayService.handleCallback(Map.of("external_id", "nonexistent", "status", "PAID"));
 
         verify(topUpTransactionRepository, never()).save(any());
-        verify(walletRepository, never()).save(any());
+        verify(walletService, never()).addBalance(any(), any());
+    }
+
+    @Test
+    void handleCallback_alreadySuccess_shouldNotDoubleCredit() {
+        UUID adminId = UUID.randomUUID();
+        String externalId = UUID.randomUUID().toString();
+
+        TopUpTransaction tx = TopUpTransaction.builder()
+                .id(UUID.randomUUID()).userId(adminId)
+                .amountRupiah(bd("100000")).amountSawitDollar(bd("10"))
+                .paymentGatewayRef(externalId).status(TopUpStatus.SUCCESS)
+                .createdAt(LocalDateTime.now()).build();
+
+        when(topUpTransactionRepository.findWithLockingByPaymentGatewayRef(externalId)).thenReturn(Optional.of(tx));
+
+        paymentGatewayService.handleCallback(Map.of("external_id", externalId, "status", "PAID"));
+
+        verify(topUpTransactionRepository, never()).save(any());
+        verify(walletService, never()).addBalance(any(), any());
+    }
+
+    @Test
+    void getTopUps_shouldReturnUserTransactionsNewestFirst() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction tx = buildTransaction(userId, "ext-ref-1", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of(tx));
+
+        List<TopUpResponse> result = paymentGatewayService.getTopUps(userId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getPaymentGatewayRef()).isEqualTo("ext-ref-1");
+        verify(topUpTransactionRepository).findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    @Test
+    void getTopUp_forOwner_shouldReturnTransaction() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction tx = buildTransaction(userId, "ext-ref-1", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findById(tx.getId())).thenReturn(Optional.of(tx));
+
+        TopUpResponse result = paymentGatewayService.getTopUp(userId, tx.getId());
+
+        assertThat(result.getId()).isEqualTo(tx.getId());
+        assertThat(result.getUserId()).isEqualTo(userId);
+    }
+
+    @Test
+    void getTopUp_forDifferentUser_shouldThrowNotFound() {
+        TopUpTransaction tx = buildTransaction(UUID.randomUUID(), "ext-ref-1", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findById(tx.getId())).thenReturn(Optional.of(tx));
+
+        assertThatThrownBy(() -> paymentGatewayService.getTopUp(UUID.randomUUID(), tx.getId()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not found");
+    }
+
+    @Test
+    void syncTopUp_paidInvoice_shouldCreditBalanceAndReturnSuccess() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction tx = buildTransaction(userId, "ext-ref-paid", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findWithLockingById(tx.getId())).thenReturn(Optional.of(tx));
+        when(xenditClient.getInvoiceByExternalId("ext-ref-paid"))
+                .thenReturn(Map.of("external_id", "ext-ref-paid", "status", "PAID"));
+        when(topUpTransactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        TopUpResponse result = paymentGatewayService.syncTopUp(userId, tx.getId());
+
+        assertThat(result.getStatus()).isEqualTo(TopUpStatus.SUCCESS);
+        verify(topUpTransactionRepository).save(argThat(saved -> saved.getStatus() == TopUpStatus.SUCCESS));
+        verify(walletService).addBalance(userId, bd("10"));
+    }
+
+    @Test
+    void syncTopUp_pendingInvoice_shouldLeaveTransactionPending() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction tx = buildTransaction(userId, "ext-ref-pending", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findWithLockingById(tx.getId())).thenReturn(Optional.of(tx));
+        when(xenditClient.getInvoiceByExternalId("ext-ref-pending"))
+                .thenReturn(Map.of("external_id", "ext-ref-pending", "status", "PENDING"));
+
+        TopUpResponse result = paymentGatewayService.syncTopUp(userId, tx.getId());
+
+        assertThat(result.getStatus()).isEqualTo(TopUpStatus.PENDING);
+        verify(topUpTransactionRepository, never()).save(any());
+        verify(walletService, never()).addBalance(any(), any());
+    }
+
+    @Test
+    void reconcilePendingTopUps_shouldPollOldPendingTransactions() {
+        UUID userId = UUID.randomUUID();
+        TopUpTransaction paid = buildTransaction(userId, "ext-ref-paid", TopUpStatus.PENDING);
+        TopUpTransaction pending = buildTransaction(userId, "ext-ref-pending", TopUpStatus.PENDING);
+        when(topUpTransactionRepository.findByStatusAndCreatedAtBefore(eq(TopUpStatus.PENDING), any(LocalDateTime.class)))
+                .thenReturn(List.of(paid, pending));
+        when(topUpTransactionRepository.findWithLockingById(paid.getId())).thenReturn(Optional.of(paid));
+        when(topUpTransactionRepository.findWithLockingById(pending.getId())).thenReturn(Optional.of(pending));
+        when(xenditClient.getInvoiceByExternalId("ext-ref-paid")).thenReturn(Map.of("status", "PAID"));
+        when(xenditClient.getInvoiceByExternalId("ext-ref-pending")).thenReturn(Map.of("status", "PENDING"));
+        when(topUpTransactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        int synced = paymentGatewayService.reconcilePendingTopUps();
+
+        assertThat(synced).isEqualTo(1);
+        verify(walletService).addBalance(userId, bd("10"));
+        verify(topUpTransactionRepository).save(argThat(saved -> saved.getStatus() == TopUpStatus.SUCCESS));
     }
 }

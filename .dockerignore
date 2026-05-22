@@ -1,0 +1,8 @@
+.DS_Store
+.env
+.git
+.gradle
+.idea
+build
+profiling
+*.iml

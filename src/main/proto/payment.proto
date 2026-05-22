@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package mysawit.payment.v1;
+
+option java_multiple_files = true;
+option java_package = "com.mysawit.integration.payment.proto";
+option java_outer_classname = "PaymentProto";
+
+service PaymentGrpcService {
+  rpc TriggerPayroll(TriggerPayrollRequest) returns (TriggerPayrollResponse) {}
+}
+
+message TriggerPayrollRequest {
+  string actor_id = 1;
+  string shipment_id = 2;
+  string role = 3;
+  string weight_kg = 4;
+}
+
+message TriggerPayrollResponse {
+  bool accepted = 1;
+}

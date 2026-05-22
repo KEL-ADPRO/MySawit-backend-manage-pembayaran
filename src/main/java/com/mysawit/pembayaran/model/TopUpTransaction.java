@@ -4,6 +4,7 @@ import com.mysawit.pembayaran.model.enums.TopUpStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -22,12 +23,13 @@ public class TopUpTransaction {
     @Column(nullable = false)
     private UUID userId;
 
-    @Column(nullable = false)
-    private double amountRupiah;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amountRupiah;
 
-    @Column(nullable = false)
-    private double amountSawitDollar;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amountSawitDollar;
 
+    @Column(nullable = false, unique = true)
     private String paymentGatewayRef;
 
     @Enumerated(EnumType.STRING)
@@ -36,4 +38,7 @@ public class TopUpTransaction {
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
+
+    @Version
+    private Long version;
 }
