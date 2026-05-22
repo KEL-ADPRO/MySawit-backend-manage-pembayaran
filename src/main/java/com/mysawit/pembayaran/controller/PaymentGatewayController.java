@@ -2,17 +2,20 @@ package com.mysawit.pembayaran.controller;
 
 import com.mysawit.pembayaran.dto.request.TopUpRequest;
 import com.mysawit.pembayaran.dto.response.TopUpResponse;
+import com.mysawit.pembayaran.model.enums.TopUpStatus;
 import com.mysawit.pembayaran.security.AuthenticatedUser;
 import com.mysawit.pembayaran.service.PaymentGatewayService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,8 +39,12 @@ public class PaymentGatewayController {
     }
 
     @GetMapping
-    public ResponseEntity<List<TopUpResponse>> getTopUps(@AuthenticationPrincipal AuthenticatedUser currentUser) {
-        return ResponseEntity.ok(paymentGatewayService.getTopUps(currentUser.userId()));
+    public ResponseEntity<List<TopUpResponse>> getTopUps(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @RequestParam(required = false) TopUpStatus status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+        return ResponseEntity.ok(paymentGatewayService.getTopUps(currentUser.userId(), status, startDate, endDate));
     }
 
     @GetMapping("/{id}")

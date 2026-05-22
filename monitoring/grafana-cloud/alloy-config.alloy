@@ -1,0 +1,25 @@
+// Grafana Alloy config: scrape mysawit-pembayaran app and remote_write to Grafana Cloud.
+// Credentials are read from environment variables (see run-alloy.sh).
+
+prometheus.scrape "mysawit_app" {
+	targets = [
+		{
+			__address__ = sys.env("MYSAWIT_APP_TARGET"),
+			job         = "mysawit-pembayaran",
+		},
+	]
+	metrics_path    = "/actuator/prometheus"
+	scrape_interval = "15s"
+	forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+	endpoint {
+		url = sys.env("GRAFANA_CLOUD_REMOTE_WRITE_URL")
+
+		basic_auth {
+			username = sys.env("GRAFANA_CLOUD_USERNAME")
+			password = sys.env("GRAFANA_CLOUD_API_TOKEN")
+		}
+	}
+}

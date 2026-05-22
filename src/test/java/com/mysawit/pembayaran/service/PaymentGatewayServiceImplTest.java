@@ -203,16 +203,47 @@ class PaymentGatewayServiceImplTest {
     }
 
     @Test
-    void getTopUps_shouldReturnUserTransactionsNewestFirst() {
+    void getTopUps_noFilters_shouldReturnUserTransactionsNewestFirst() {
         UUID userId = UUID.randomUUID();
         TopUpTransaction tx = buildTransaction(userId, "ext-ref-1", TopUpStatus.PENDING);
         when(topUpTransactionRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of(tx));
 
-        List<TopUpResponse> result = paymentGatewayService.getTopUps(userId);
+        List<TopUpResponse> result = paymentGatewayService.getTopUps(userId, null, null, null);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getPaymentGatewayRef()).isEqualTo("ext-ref-1");
         verify(topUpTransactionRepository).findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    @Test
+    void getTopUps_withStatusAndDateRange_shouldFilterResults() {
+        UUID userId = UUID.randomUUID();
+        LocalDateTime now = LocalDateTime.now();
+
+        TopUpTransaction oldPending = TopUpTransaction.builder()
+                .id(UUID.randomUUID()).userId(userId)
+                .amountRupiah(bd("100000")).amountSawitDollar(bd("10"))
+                .paymentGatewayRef("ext-old-pending").status(TopUpStatus.PENDING)
+                .createdAt(now.minusDays(10)).build();
+        TopUpTransaction recentSuccess = TopUpTransaction.builder()
+                .id(UUID.randomUUID()).userId(userId)
+                .amountRupiah(bd("100000")).amountSawitDollar(bd("10"))
+                .paymentGatewayRef("ext-recent-success").status(TopUpStatus.SUCCESS)
+                .createdAt(now.minusDays(2)).build();
+        TopUpTransaction recentPending = TopUpTransaction.builder()
+                .id(UUID.randomUUID()).userId(userId)
+                .amountRupiah(bd("100000")).amountSawitDollar(bd("10"))
+                .paymentGatewayRef("ext-recent-pending").status(TopUpStatus.PENDING)
+                .createdAt(now.minusDays(1)).build();
+
+        when(topUpTransactionRepository.findByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(List.of(recentPending, recentSuccess, oldPending));
+
+        List<TopUpResponse> result = paymentGatewayService.getTopUps(
+                userId, TopUpStatus.PENDING, now.minusDays(5), now);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getPaymentGatewayRef()).isEqualTo("ext-recent-pending");
     }
 
     @Test
