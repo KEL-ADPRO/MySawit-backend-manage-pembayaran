@@ -45,3 +45,6 @@ application.properties
 *.jfr
 jmeter.log
 profiling/
+
+### Monitoring ###
+monitoring/grafana-cloud/data-alloy/

@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -140,7 +141,8 @@ class PaymentGatewayControllerTest {
     @Test
     void getTopUps_authenticated_shouldReturnUserTopUps() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(paymentGatewayService.getTopUps(userId)).thenReturn(List.of(buildTopUpResponse(userId)));
+        when(paymentGatewayService.getTopUps(eq(userId), isNull(), isNull(), isNull()))
+                .thenReturn(List.of(buildTopUpResponse(userId)));
 
         mockMvc.perform(get("/api/pembayaran/wallet/topup")
                         .header("X-User-Id", userId.toString())
@@ -149,7 +151,25 @@ class PaymentGatewayControllerTest {
                 .andExpect(jsonPath("$[0].userId").value(userId.toString()))
                 .andExpect(jsonPath("$[0].status").value("PENDING"));
 
-        verify(paymentGatewayService).getTopUps(userId);
+        verify(paymentGatewayService).getTopUps(eq(userId), isNull(), isNull(), isNull());
+    }
+
+    @Test
+    void getTopUps_withFilters_shouldPassFiltersToService() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(paymentGatewayService.getTopUps(eq(userId), eq(TopUpStatus.SUCCESS), any(), any()))
+                .thenReturn(List.of(buildTopUpResponse(userId)));
+
+        mockMvc.perform(get("/api/pembayaran/wallet/topup")
+                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Role", "ADMIN")
+                        .param("status", "SUCCESS")
+                        .param("startDate", "2026-01-01T00:00:00")
+                        .param("endDate", "2026-12-31T23:59:59"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userId").value(userId.toString()));
+
+        verify(paymentGatewayService).getTopUps(eq(userId), eq(TopUpStatus.SUCCESS), any(), any());
     }
 
     @Test
