@@ -14,7 +14,8 @@ public class CreatePayrollRequest {
     @NotNull
     private UUID userId;
 
-    @NotNull
+    // Optional: when omitted (manual admin payroll), the role is auto-resolved
+    // from the selected user via the User module. Integration flows still set it.
     private UserRole userRole;
 
     private PayrollSourceType sourceType;

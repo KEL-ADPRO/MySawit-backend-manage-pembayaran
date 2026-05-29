@@ -1,5 +1,6 @@
 package com.mysawit.pembayaran.service;
 
+import com.mysawit.pembayaran.client.UserDirectoryClient;
 import com.mysawit.pembayaran.dto.request.CreatePayrollRequest;
 import com.mysawit.pembayaran.dto.request.RejectPayrollRequest;
 import com.mysawit.pembayaran.dto.response.PayrollResponse;
@@ -39,6 +40,7 @@ public class PayrollServiceImpl implements PayrollService {
     private final WageConfigRepository wageConfigRepository;
     private final WageCalculatorFactory wageCalculatorFactory;
     private final WalletService walletService;
+    private final UserDirectoryClient userDirectoryClient;
 
     @Value("${xendit.exchange-rate:10000}")
     private BigDecimal exchangeRate;
@@ -46,6 +48,15 @@ public class PayrollServiceImpl implements PayrollService {
     @Override
     @Transactional
     public PayrollResponse createPayroll(CreatePayrollRequest request) {
+        // Manual admin payroll only sends the recipient's userId (chosen from the
+        // dropdown); resolve the role from the User module. Integration flows still
+        // provide the role explicitly, so they skip the lookup.
+        if (request.getUserRole() == null) {
+            if (request.getUserId() == null) {
+                throw new IllegalArgumentException("userId is required");
+            }
+            request.setUserRole(userDirectoryClient.resolveRole(request.getUserId()));
+        }
         if (request.getUserRole() == UserRole.ADMIN) {
             throw new IllegalArgumentException("Admin cannot be a payroll recipient");
         }

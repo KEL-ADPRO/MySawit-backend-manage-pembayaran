@@ -1,5 +1,6 @@
 package com.mysawit.pembayaran.service;
 
+import com.mysawit.pembayaran.client.UserDirectoryClient;
 import com.mysawit.pembayaran.dto.request.CreatePayrollRequest;
 import com.mysawit.pembayaran.dto.request.RejectPayrollRequest;
 import com.mysawit.pembayaran.dto.response.PayrollResponse;
@@ -46,6 +47,9 @@ class PayrollServiceImplTest {
     @Mock
     private WalletService walletService;
 
+    @Mock
+    private UserDirectoryClient userDirectoryClient;
+
     private PayrollServiceImpl payrollService;
 
     @BeforeEach
@@ -57,7 +61,8 @@ class PayrollServiceImplTest {
                         new BuruhWageStrategy(),
                         new SupirTrukWageStrategy(),
                         new MandorWageStrategy())),
-                walletService);
+                walletService,
+                userDirectoryClient);
         ReflectionTestUtils.setField(payrollService, "exchangeRate", new BigDecimal("10000"));
     }
 
@@ -207,6 +212,55 @@ class PayrollServiceImplTest {
 
         assertThat(result.getId()).isEqualTo(existing.getId());
         verify(payrollRepository, never()).save(any());
+    }
+
+    @Test
+    void createPayroll_nullRole_resolvesRoleFromUserDirectory() {
+        UUID userId = UUID.randomUUID();
+        when(userDirectoryClient.resolveRole(userId)).thenReturn(UserRole.BURUH);
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("50", "0", "0")));
+        mockSave();
+
+        CreatePayrollRequest request = new CreatePayrollRequest();
+        request.setUserId(userId);
+        request.setHarvestedKg(bd("100"));
+
+        PayrollResponse result = payrollService.createPayroll(request);
+
+        assertThat(result.getUserRole()).isEqualTo(UserRole.BURUH);
+        assertThat(result.getKilogramType()).isEqualTo(PayrollKilogramType.HARVESTED);
+        verify(userDirectoryClient).resolveRole(userId);
+    }
+
+    @Test
+    void createPayroll_nullRole_resolvedAsAdmin_isRejected() {
+        UUID userId = UUID.randomUUID();
+        when(userDirectoryClient.resolveRole(userId)).thenReturn(UserRole.ADMIN);
+
+        CreatePayrollRequest request = new CreatePayrollRequest();
+        request.setUserId(userId);
+        request.setHarvestedKg(bd("100"));
+
+        assertThatThrownBy(() -> payrollService.createPayroll(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Admin");
+        verify(payrollRepository, never()).save(any());
+    }
+
+    @Test
+    void createPayroll_explicitRole_skipsUserDirectoryLookup() {
+        UUID userId = UUID.randomUUID();
+        when(wageConfigRepository.findFirstByOrderByUpdatedAtDesc()).thenReturn(Optional.of(wageConfigWith("50", "0", "0")));
+        mockSave();
+
+        CreatePayrollRequest request = new CreatePayrollRequest();
+        request.setUserId(userId);
+        request.setUserRole(UserRole.BURUH);
+        request.setHarvestedKg(bd("100"));
+
+        payrollService.createPayroll(request);
+
+        verifyNoInteractions(userDirectoryClient);
     }
 
     @Test

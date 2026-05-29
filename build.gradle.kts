@@ -41,6 +41,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("net.devh:grpc-server-spring-boot-starter:3.1.0.RELEASE")
+    implementation("net.devh:grpc-client-spring-boot-starter:3.1.0.RELEASE")
     implementation("io.grpc:grpc-protobuf")
     implementation("io.grpc:grpc-stub")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17")

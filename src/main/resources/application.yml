@@ -30,6 +30,10 @@ server:
 grpc:
   server:
     port: ${GRPC_PORT:9093}
+  client:
+    user-service:
+      address: ${USER_GRPC_ADDRESS:static://localhost:9091}
+      negotiation-type: plaintext
 
 management:
   endpoints:

@@ -1,5 +1,6 @@
 package com.mysawit.pembayaran.service;
 
+import com.mysawit.pembayaran.client.UserDirectoryClient;
 import com.mysawit.pembayaran.dto.request.DriverDeliveryPayrollEventRequest;
 import com.mysawit.pembayaran.dto.request.FactoryDeliveryPayrollEventRequest;
 import com.mysawit.pembayaran.dto.request.HarvestPayrollEventRequest;
@@ -46,6 +47,9 @@ class PayrollIntegrationServiceImplTest {
     @Mock
     private WalletService walletService;
 
+    @Mock
+    private UserDirectoryClient userDirectoryClient;
+
     private PayrollIntegrationServiceImpl integrationService;
 
     private BigDecimal bd(String value) {
@@ -61,7 +65,8 @@ class PayrollIntegrationServiceImplTest {
                         new BuruhWageStrategy(),
                         new SupirTrukWageStrategy(),
                         new MandorWageStrategy())),
-                walletService);
+                walletService,
+                userDirectoryClient);
         ReflectionTestUtils.setField(payrollService, "exchangeRate", new BigDecimal("10000"));
         integrationService = new PayrollIntegrationServiceImpl(payrollService);
 

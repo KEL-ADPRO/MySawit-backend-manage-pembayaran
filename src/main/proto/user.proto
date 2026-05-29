@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package mysawit.user.v1;
+
+option java_multiple_files = true;
+option java_package = "com.mysawit.pembayaran.grpc.user.proto";
+option java_outer_classname = "UserDirectoryProto";
+
+// Contract that the User/Auth module must expose so the Pembayaran module can
+// resolve payroll recipients (dropdown of selectable users + auto role lookup).
+// Expected to run on port 9091. See docs/integration.md.
+service UserService {
+  // Lists users for the admin payroll-recipient dropdown.
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {}
+  // Resolves a single user (used to auto-fill role on payroll creation).
+  rpc GetUserById(GetUserByIdRequest) returns (UserSummary) {}
+}
+
+message ListUsersRequest {
+  // Optional role filter (ADMIN, BURUH, MANDOR, SUPIR_TRUK). Empty = all roles.
+  string role_filter = 1;
+}
+
+message ListUsersResponse {
+  repeated UserSummary users = 1;
+}
+
+message GetUserByIdRequest {
+  string user_id = 1;
+}
+
+message UserSummary {
+  string id = 1;
+  string nama = 2;
+  string email = 3;
+  string role = 4;
+}

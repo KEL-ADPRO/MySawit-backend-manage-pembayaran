@@ -48,3 +48,6 @@ profiling/
 
 ### Monitoring ###
 monitoring/grafana-cloud/data-alloy/
+
+### Docs (local only) ###
+docs/grpc-user-contract.md
